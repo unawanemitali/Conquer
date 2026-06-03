@@ -1,0 +1,6 @@
+{
+  "name": "Gamified Productivity",
+  "description": "A gamified custom productivity app with categorized habits, time-series calendars, and gamified progress tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
