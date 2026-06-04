@@ -48,7 +48,7 @@ If you want to test the app yourself, you can run it using Android Studio.
 5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
 6. Run the app on an emulator or physical device.
 
-*(Note: You can view the original AI Studio workspace for this app [here](https://ai.studio/apps/95ad9003-bee7-4660-976c-e69efb2dc808))*
+*(Note: You can view the original AI Studio workspace for this app here(https://ai.studio/apps/95ad9003-bee7-4660-976c-e69efb2dc808))*
 
 ---
 
