@@ -89,7 +89,24 @@ class TaskRepository(
         }
         val streakBonus = 1.0f + (if (task.isRecurring) minOf(updatedStreak, 10) * 0.05f else 0.0f)
         
-        var xpEarned = Math.round(task.xp * difficultyFactor * categoryFactor * streakBonus)
+        val isOverclockActive = (activePotions["overclock"]?.let { it > timestamp } ?: false) ||
+                                (activePotions["overclock_elixir"]?.let { it > timestamp } ?: false)
+        val isBurnoutActive = (activePotions["burnout"]?.let { it > timestamp } ?: false)
+        
+        val baseXP = task.xp
+        var finalXP = baseXP.toDouble()
+        if (task.usedMidnightOil == true) {
+            finalXP = 0.0
+        } else {
+            if (isOverclockActive) {
+                finalXP = baseXP * 2.0
+            }
+            if (isBurnoutActive) {
+                finalXP = baseXP * 0.5
+            }
+        }
+        
+        var xpEarned = Math.round(finalXP * difficultyFactor * categoryFactor * streakBonus).toInt()
 
         // Apply Midnight Oil penalty (0 XP upon completion)
         if (midnightOilTaskIds.contains(task.id)) {
@@ -99,12 +116,6 @@ class TaskRepository(
             val isFreezeActive = activePotions["freeze_potion"]?.let { it > timestamp } ?: false
             if (isFreezeActive) {
                 xpEarned = Math.round(xpEarned / 2f)
-            }
-
-            // Apply Overclock Elixir buff (2x XP)
-            val isOverclockActive = activePotions["overclock_elixir"]?.let { it > timestamp } ?: false
-            if (isOverclockActive) {
-                xpEarned = xpEarned * 2
             }
 
             // Apply Spartan's Vow buff (1.5x on Work tasks)

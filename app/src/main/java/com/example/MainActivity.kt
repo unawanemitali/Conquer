@@ -63,13 +63,18 @@ import java.util.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.text.selection.SelectionContainer
 
-// --- Custom Theme Palette (Supporting 5 distinct dynamic color palettes) ---
+// --- Custom Theme Palette (Supporting distinct dynamic color palettes) ---
 enum class AppThemePalette(val displayName: String) {
     MIDNIGHT_SYSTEM("Midnight System"),
     STARLIGHT_ORBIT("Starlight Orbit"),
     ELITE_ACADEMY("Elite Academy"),
     MECH_BLUEPRINT("Mech Blueprint"),
-    TERRACOTTA_EARTH("Terracotta Earth")
+    TERRACOTTA_EARTH("Terracotta Earth"),
+    NET_RUNNER("Retro Hacker Green"),
+    LAB_DIVERTER("Steins Laboratory Orange"),
+    DEEP_SPACE("Odyssey Ship Board"),
+    BRASS_ALCHEMY("Clockwork Brass Gold"),
+    NEO_GENESIS("Neo-Genesis Purple")
 }
 
 data class ThemeColors(
@@ -183,6 +188,91 @@ object AppThemeManager {
                 categoryEntertainmentColor = Color(0xFFFEE2E2),
                 categoryEntertainmentBg = Color(0xFF7F1D1D),
                 isDark = false
+            )
+            AppThemePalette.NET_RUNNER -> ThemeColors(
+                background = Color(0xFF031006),
+                surface = Color(0xFF05200C),
+                surfaceLight = Color(0x3300FF41),
+                primaryAccent = Color(0xFF00FF41),
+                secondaryAccent = Color(0xFF33CC33),
+                tertiaryAccent = Color(0xFF00FF41),
+                textColor = Color(0xFF00FF41),
+                mutedTextColor = Color(0xFF008F11),
+                categoryWorkColor = Color(0xFFD3E3FD),
+                categoryWorkBg = Color(0xFF122C5C),
+                categoryPersonalColor = Color(0xFFC2EFD4),
+                categoryPersonalBg = Color(0xFF094C20),
+                categoryEntertainmentColor = Color(0xFFFFD8E4),
+                categoryEntertainmentBg = Color(0xFF58142A),
+                isDark = true
+            )
+            AppThemePalette.LAB_DIVERTER -> ThemeColors(
+                background = Color(0xFF0C0A09),
+                surface = Color(0xFF1C1917),
+                surfaceLight = Color(0x33EA580C),
+                primaryAccent = Color(0xFFF97316),
+                secondaryAccent = Color(0xFFEA580C),
+                tertiaryAccent = Color(0xFFF97316),
+                textColor = Color(0xFFF2F2F2),
+                mutedTextColor = Color(0xFF78716C),
+                categoryWorkColor = Color(0xFFFEF3C7),
+                categoryWorkBg = Color(0xFF78350F),
+                categoryPersonalColor = Color(0xFFD1FAE5),
+                categoryPersonalBg = Color(0xFF064E3B),
+                categoryEntertainmentColor = Color(0xFFFEE2E2),
+                categoryEntertainmentBg = Color(0xFF7F1D1D),
+                isDark = true
+            )
+            AppThemePalette.DEEP_SPACE -> ThemeColors(
+                background = Color(0xFF050505),
+                surface = Color(0xFF141414),
+                surfaceLight = Color(0x33DC2626),
+                primaryAccent = Color(0xFFEF4444),
+                secondaryAccent = Color(0xFFB91C1C),
+                tertiaryAccent = Color(0xFFEF4444),
+                textColor = Color(0xFFECECEC),
+                mutedTextColor = Color(0xFF6B7280),
+                categoryWorkColor = Color(0xFFFFFFD5),
+                categoryWorkBg = Color(0xFF7C2D12),
+                categoryPersonalColor = Color(0xFFD1FAE5),
+                categoryPersonalBg = Color(0xFF064E3B),
+                categoryEntertainmentColor = Color(0xFFE0F2FE),
+                categoryEntertainmentBg = Color(0xFF0C4A6E),
+                isDark = true
+            )
+            AppThemePalette.BRASS_ALCHEMY -> ThemeColors(
+                background = Color(0xFF0F1E36),
+                surface = Color(0xFF1B2E4F),
+                surfaceLight = Color(0x33EAB308),
+                primaryAccent = Color(0xFFFACC15),
+                secondaryAccent = Color(0xFFCA8A04),
+                tertiaryAccent = Color(0xFFFACC15),
+                textColor = Color(0xFFF1F5F9),
+                mutedTextColor = Color(0xFF94A3B8),
+                categoryWorkColor = Color(0xFFFFEDD5),
+                categoryWorkBg = Color(0xFF7C2D12),
+                categoryPersonalColor = Color(0xFFD1FAE5),
+                categoryPersonalBg = Color(0xFF064E3B),
+                categoryEntertainmentColor = Color(0xFFE0F2FE),
+                categoryEntertainmentBg = Color(0xFF0C4A6E),
+                isDark = true
+            )
+            AppThemePalette.NEO_GENESIS -> ThemeColors(
+                background = Color(0xFF1E0A2D),
+                surface = Color(0xFF2C1042),
+                surfaceLight = Color(0x33F97316),
+                primaryAccent = Color(0xFFD946EF),
+                secondaryAccent = Color(0xFFF97316),
+                tertiaryAccent = Color(0xFFD946EF),
+                textColor = Color(0xFFFDF4FF),
+                mutedTextColor = Color(0xFFA21CAF),
+                categoryWorkColor = Color(0xFFE9D5FF),
+                categoryWorkBg = Color(0xFF3B0764),
+                categoryPersonalColor = Color(0xFFF1F5F9),
+                categoryPersonalBg = Color(0xFF1E293B),
+                categoryEntertainmentColor = Color(0xFFFAE8FF),
+                categoryEntertainmentBg = Color(0xFF701A75),
+                isDark = true
             )
         }
 
@@ -1018,17 +1108,40 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
 // DASHBOARD TAB: Task lists & character stats
 // ============================================
 
+fun getOutfitEmoji(skinId: String): String? {
+    if (skinId == "default" || skinId.isEmpty()) return null
+    val milestone = com.example.data.models.MilestoneSystem.unlockablesList.firstOrNull { it.id == skinId }
+    if (milestone != null) return milestone.iconEmoji
+    
+    return when (skinId) {
+        "tokyo_runner" -> "🧑‍🎤"
+        "ghost_protocol" -> "🥽"
+        "chrono_weaver" -> "⌚"
+        "mecha_pilot" -> "🤖"
+        "star_marshal" -> "🚀"
+        "neo_novice" -> "🧑‍🎤"
+        "quantum_architect" -> "🥽"
+        "mecha_overlord" -> "🤖"
+        "glitch_runner" -> "🛹"
+        "chronos_controller" -> "⌚"
+        "hyperion_voyager" -> "🚀"
+        "grandmaster_ai" -> "🌌"
+        else -> null
+    }
+}
+
 @Composable
 fun AvatarProfileView(
     equippedSkinId: String, 
     unlockedSet: Set<String> = emptySet(), 
     modifier: Modifier = Modifier
 ) {
-    val isLocked = unlockedSet.isEmpty() || (!unlockedSet.contains(equippedSkinId) && equippedSkinId != "default")
+    val storeSkins = setOf("tokyo_runner", "ghost_protocol", "chrono_weaver", "mecha_pilot", "star_marshal")
+    val isLocked = equippedSkinId != "default" && !storeSkins.contains(equippedSkinId) && (unlockedSet.isEmpty() || !unlockedSet.contains(equippedSkinId))
+    val outfitEmoji = if (isLocked) null else getOutfitEmoji(equippedSkinId)
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
-            .size(100.dp)
             .background(if (isLocked) Color(0xFF151515) else ElectroPurple.copy(alpha = 0.05f), CircleShape)
             .border(
                 2.dp, 
@@ -1037,6 +1150,8 @@ fun AvatarProfileView(
             ),
         contentAlignment = Alignment.Center
     ) {
+        val containerWidth = maxWidth
+        
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.width / 2 * 0.85f
@@ -1055,6 +1170,11 @@ fun AvatarProfileView(
                             "chronos_controller" -> listOf(Color(0xFFDAA520), Color(0xFFEADDFF), Color.Transparent)
                             "hyperion_voyager" -> listOf(Color(0xFF00BFFF), Color(0xFFD3E3FD), Color.Transparent)
                             "grandmaster_ai" -> listOf(Color(0xFF9400D3), Color(0xFFFFD700), Color.Transparent)
+                            "tokyo_runner" -> listOf(Color(0xFF00FF41), Color(0xFF031006), Color.Transparent)
+                            "ghost_protocol" -> listOf(Color(0xFFA855F7), Color(0xFF1E1E1E), Color.Transparent)
+                            "chrono_weaver" -> listOf(Color(0xFFF97316), Color(0xFF0C0A09), Color.Transparent)
+                            "mecha_pilot" -> listOf(Color(0xFF6B7280), Color(0xFFEF4444), Color.Transparent)
+                            "star_marshal" -> listOf(Color(0xFF1E90FF), Color(0xFFFFD700), Color.Transparent)
                             else -> listOf(ElectroPurple.copy(alpha = 0.3f), Color.Transparent)
                         }
                     },
@@ -1065,193 +1185,89 @@ fun AvatarProfileView(
                 radius = radius
             )
 
-            // Draw base head/shoulders or cybernetic accessories
-            val headCenter = Offset(size.width / 2, size.height * 0.45f)
-            val headRadius = size.width * 0.22f
-            
-            // Shoulders path
-            val shoulderPath = Path().apply {
-                moveTo(size.width * 0.2f, size.height * 0.9f)
-                quadraticBezierTo(
-                    size.width / 2, size.height * 0.65f,
-                    size.width * 0.8f, size.height * 0.9f
+            // ONLY draw the legacy Head/Shoulders vector shapes if we do NOT have a custom active outfit emoji
+            if (outfitEmoji == null) {
+                // Draw base head/shoulders or cybernetic accessories
+                val headCenter = Offset(size.width / 2, size.height * 0.45f)
+                val headRadius = size.width * 0.22f
+                
+                // Shoulders path
+                val shoulderPath = Path().apply {
+                    moveTo(size.width * 0.2f, size.height * 0.9f)
+                    quadraticBezierTo(
+                        size.width / 2, size.height * 0.65f,
+                        size.width * 0.8f, size.height * 0.9f
+                    )
+                    close()
+                }
+                
+                // Draw shoulders
+                drawPath(
+                    path = shoulderPath,
+                    color = if (isLocked) {
+                        Color(0xFF242424)
+                    } else {
+                        when (equippedSkinId) {
+                            "neo_novice" -> Color(0xFF6750A4)
+                            "quantum_architect" -> Color(0xFF381E72)
+                            "mecha_overlord" -> Color(0xFF333333)
+                            "glitch_runner" -> Color(0xFF1D1B20)
+                            "chronos_controller" -> Color(0xFF8B4513)
+                            "hyperion_voyager" -> Color(0xFFE0E0E0)
+                            "grandmaster_ai" -> Color(0xFFFFD700)
+                            "tokyo_runner" -> Color(0xFF00FF41)
+                            "ghost_protocol" -> Color(0xFFA855F7)
+                            "chrono_weaver" -> Color(0xFFF97316)
+                            "mecha_pilot" -> Color(0xFFEF4444)
+                            "star_marshal" -> Color(0xFF1E90FF)
+                            else -> Color(0xFF9C27B0)
+                        }
+                    }
                 )
-                close()
-            }
-            
-            // Draw shoulders
-            drawPath(
-                path = shoulderPath,
-                color = if (isLocked) {
-                    Color(0xFF242424)
-                } else {
-                    when (equippedSkinId) {
-                        "neo_novice" -> Color(0xFF6750A4)
-                        "quantum_architect" -> Color(0xFF381E72)
-                        "mecha_overlord" -> Color(0xFF333333)
-                        "glitch_runner" -> Color(0xFF1D1B20)
-                        "chronos_controller" -> Color(0xFF8B4513)
-                        "hyperion_voyager" -> Color(0xFFE0E0E0)
-                        "grandmaster_ai" -> Color(0xFFFFD700)
-                        else -> Color(0xFF9C27B0)
-                    }
-                }
-            )
-            
-            // Draw face / helmet
-            drawCircle(
-                color = if (isLocked) {
-                    Color(0xFF333333)
-                } else {
-                    when (equippedSkinId) {
-                        "mecha_overlord" -> Color(0xFF808080)
-                        "hyperion_voyager" -> Color(0xFFF5F5F5)
-                        "grandmaster_ai" -> Color(0xFFFFF8DC)
-                        else -> Color(0xFFFFD1A9)
-                    }
-                },
-                radius = headRadius,
-                center = headCenter
-            )
+                
+                // Draw face / helmet
+                drawCircle(
+                    color = if (isLocked) {
+                        Color(0xFF333333)
+                    } else {
+                        when (equippedSkinId) {
+                            "mecha_overlord" -> Color(0xFF808080)
+                            "hyperion_voyager" -> Color(0xFFF5F5F5)
+                            "grandmaster_ai" -> Color(0xFFFFF8DC)
+                            "mecha_pilot" -> Color(0xFF4B5563)
+                            "star_marshal" -> Color(0xFF111827)
+                            else -> Color(0xFFFFD1A9)
+                        }
+                    },
+                    radius = headRadius,
+                    center = headCenter
+                )
 
-            // Dynamic accessories based on unlocked skin
-            if (!isLocked) {
-                when (equippedSkinId) {
-                    "neo_novice" -> {
-                        // Glowing cyan headphones / band
-                        drawCircle(
-                            color = Color(0xFF381E72),
-                            radius = headRadius * 1.1f,
-                            center = headCenter,
-                            style = Stroke(width = 4.dp.toPx())
-                        )
-                        // Cyan visor line
-                        drawLine(
-                            color = Color.Cyan,
-                            start = Offset(headCenter.x - headRadius, headCenter.y - 2.dp.toPx()),
-                            end = Offset(headCenter.x + headRadius, headCenter.y - 2.dp.toPx()),
-                            strokeWidth = 6.dp.toPx()
-                        )
-                    }
-                    "quantum_architect" -> {
-                        // Futuristic glowing green visor (HUD)
-                        drawLine(
-                            color = Color(0xFF00FFCC),
-                            start = Offset(headCenter.x - headRadius * 0.9f, headCenter.y - 4.dp.toPx()),
-                            end = Offset(headCenter.x + headRadius * 0.9f, headCenter.y - 4.dp.toPx()),
-                            strokeWidth = 10.dp.toPx()
-                        )
-                        // Visual radar circles
-                        drawCircle(
-                            color = Color(0xFF00FFCC),
-                            radius = headRadius * 1.3f,
-                            center = headCenter,
-                            style = Stroke(width = 2.dp.toPx())
-                        )
-                    }
-                    "mecha_overlord" -> {
-                        // Robotic crimson visor eyes
-                        drawLine(
-                            color = Color.Red,
-                            start = Offset(headCenter.x - headRadius * 0.6f, headCenter.y - 2.dp.toPx()),
-                            end = Offset(headCenter.x - headRadius * 0.1f, headCenter.y - 2.dp.toPx()),
-                            strokeWidth = 5.dp.toPx()
-                        )
-                        drawLine(
-                            color = Color.Red,
-                            start = Offset(headCenter.x + headRadius * 0.1f, headCenter.y - 2.dp.toPx()),
-                            end = Offset(headCenter.x + headRadius * 0.6f, headCenter.y - 2.dp.toPx()),
-                            strokeWidth = 5.dp.toPx()
-                        )
-                        // Mecha antennas
-                        drawLine(
-                            color = Color.DarkGray,
-                            start = Offset(headCenter.x - headRadius * 0.5f, headCenter.y - headRadius),
-                            end = Offset(headCenter.x - headRadius * 1.2f, headCenter.y - headRadius * 1.8f),
-                            strokeWidth = 4.dp.toPx()
-                        )
-                        drawLine(
-                            color = Color.DarkGray,
-                            start = Offset(headCenter.x + headRadius * 0.5f, headCenter.y - headRadius),
-                            end = Offset(headCenter.x + headRadius * 1.2f, headCenter.y - headRadius * 1.8f),
-                            strokeWidth = 4.dp.toPx()
-                        )
-                    }
-                    "glitch_runner" -> {
-                        // Hot-pink retro glasses
-                        drawLine(
-                            color = Color(0xFFFF007F),
-                            start = Offset(headCenter.x - headRadius * 0.9f, headCenter.y - 3.dp.toPx()),
-                            end = Offset(headCenter.x + headRadius * 0.9f, headCenter.y - 3.dp.toPx()),
-                            strokeWidth = 12.dp.toPx()
-                        )
-                    }
-                    "chronos_controller" -> {
-                        // Vintage gold goggles
-                        drawCircle(
-                            color = Color(0xFFDAA520),
-                            radius = headRadius * 0.4f,
-                            center = Offset(headCenter.x - headRadius * 0.4f, headCenter.y),
-                            style = Stroke(width = 3.dp.toPx())
-                        )
-                        drawCircle(
-                            color = Color(0xFFDAA520),
-                            radius = headRadius * 0.4f,
-                            center = Offset(headCenter.x + headRadius * 0.4f, headCenter.y),
-                            style = Stroke(width = 3.dp.toPx())
-                        )
-                        // Bridge line
-                        drawLine(
-                            color = Color(0xFFDAA520),
-                            start = Offset(headCenter.x - headRadius * 0.2f, headCenter.y),
-                            end = Offset(headCenter.x + headRadius * 0.2f, headCenter.y),
-                            strokeWidth = 3.dp.toPx()
-                        )
-                    }
-                    "hyperion_voyager" -> {
-                        // Shiny blue space helmet visor
-                        drawArc(
-                            color = Color(0xFF1E90FF),
-                            startAngle = 180f,
-                            sweepAngle = 180f,
-                            useCenter = true,
-                            topLeft = Offset(headCenter.x - headRadius * 0.8f, headCenter.y - headRadius * 0.8f),
-                            size = androidx.compose.ui.geometry.Size(headRadius * 1.6f, headRadius * 1.4f)
-                        )
-                        // Visor glass reflection
-                        drawLine(
-                            color = Color.White.copy(alpha = 0.5f),
-                            start = Offset(headCenter.x - headRadius * 0.3f, headCenter.y - headRadius * 0.3f),
-                            end = Offset(headCenter.x + headRadius * 0.1f, headCenter.y + headRadius * 0.1f),
-                            strokeWidth = 4.dp.toPx()
-                        )
-                    }
-                    "grandmaster_ai" -> {
-                        // Celestial golden eyes & halo rings
-                        drawCircle(
-                            color = Color(0xFFFFD700),
-                            radius = headRadius * 1.4f,
-                            center = headCenter,
-                            style = Stroke(width = 2.dp.toPx())
-                        )
-                    }
-                    else -> {
-                        // Simple dark glasses for default
-                        drawLine(
-                            color = Color.Black,
-                            start = Offset(headCenter.x - headRadius * 0.8f, headCenter.y - 2.dp.toPx()),
-                            end = Offset(headCenter.x + headRadius * 0.8f, headCenter.y - 2.dp.toPx()),
-                            strokeWidth = 6.dp.toPx()
-                        )
-                    }
-                }
+                // Simple default dark glasses
+                drawLine(
+                    color = Color.Black,
+                    start = Offset(headCenter.x - headRadius * 0.8f, headCenter.y - 2.dp.toPx()),
+                    end = Offset(headCenter.x + headRadius * 0.8f, headCenter.y - 2.dp.toPx()),
+                    strokeWidth = 6.dp.toPx()
+                )
             }
+        }
+
+        // Render the activeOutfit's visual asset emoji centered!
+        if (outfitEmoji != null) {
+            val emojiSize = (containerWidth.value * 0.45f).coerceIn(14f, 48f).sp
+            Text(
+                text = outfitEmoji,
+                fontSize = emojiSize,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center)
+            )
         }
 
         if (isLocked) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size((containerWidth.value * 0.24f).coerceIn(12f, 24f).dp)
                     .background(Color.Black.copy(alpha = 0.7f), CircleShape)
                     .align(Alignment.BottomEnd)
             ) {
@@ -1260,7 +1276,7 @@ fun AvatarProfileView(
                     contentDescription = "🔒 Cyber Silhouette Locked",
                     tint = Color.Gray,
                     modifier = Modifier
-                        .size(14.dp)
+                        .size((containerWidth.value * 0.14f).coerceIn(8f, 14f).dp)
                         .align(Alignment.Center)
                 )
             }
@@ -1339,6 +1355,8 @@ fun DashboardScreen(
     val frogTaskId by viewModel.frogTaskId.collectAsState()
     val activePotionEffects by viewModel.activePotionEffects.collectAsState()
     val midnightOilTaskIdsByState by viewModel.midnightOilTaskIds.collectAsState()
+    val activeOutfit by viewModel.activeOutfit.collectAsState()
+    val unlockedSet by viewModel.unlockedRewardsIdsFlow.collectAsState()
 
     val filteredTasks = tasks.filter { !it.isRecurring }.let { list ->
         if (filterCategory == null) {
@@ -1437,11 +1455,33 @@ fun DashboardScreen(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+
+                // --- Top Header Profile Avatar Touchpoint ---
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(CosmosSurface)
+                        .border(BorderStroke(1.dp, CosmosSurfaceLight), CircleShape)
+                        .clickable { onOpenSettings?.invoke() }
+                        .testTag("top_header_avatar_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AvatarProfileView(
+                        equippedSkinId = activeOutfit,
+                        unlockedSet = unlockedSet,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
 
         // --- 1. GUIILD HERO LEVEL (Strictly top-most card displaying Level and XP) ---
-        HeroLevelCard(levelInfo = userLevel)
+        HeroLevelCard(
+            levelInfo = userLevel,
+            activeOutfit = activeOutfit,
+            unlockedSet = unlockedSet
+        )
 
         // --- Real-time "Active Effects HUD" ---
         ActiveEffectsHUD(activePotionEffects = activePotionEffects)
@@ -1601,14 +1641,15 @@ fun DashboardScreen(
         }
 
         // --- Streaks Overview ---
+        val isFreezeActive = activePotionEffects["freeze_potion"]?.let { it > System.currentTimeMillis() } ?: false
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             StreakStatsCard(
-                title = "Active Streaks",
-                value = "$activeStreaks Tasks",
-                emoji = "⚡",
+                title = if (isFreezeActive) "Frozen Streaks" else "Active Streaks",
+                value = if (isFreezeActive) "Frozen (Active)" else "$activeStreaks Tasks",
+                emoji = if (isFreezeActive) "❄️" else "⚡",
                 modifier = Modifier.weight(1f)
             )
             StreakStatsCard(
@@ -1801,6 +1842,11 @@ fun MainSettingsDialog(
                                         AppThemePalette.ELITE_ACADEMY -> Color(0xFFFFFFFF)
                                         AppThemePalette.MECH_BLUEPRINT -> Color(0xFF0B132B)
                                         AppThemePalette.TERRACOTTA_EARTH -> Color(0xFFF7F5F0)
+                                        AppThemePalette.NET_RUNNER -> Color(0xFF031006)
+                                        AppThemePalette.LAB_DIVERTER -> Color(0xFF0C0A09)
+                                        AppThemePalette.DEEP_SPACE -> Color(0xFF050505)
+                                        AppThemePalette.BRASS_ALCHEMY -> Color(0xFF0F1E36)
+                                        AppThemePalette.NEO_GENESIS -> Color(0xFF1E0A2D)
                                     }
                                 ),
                                 shape = RoundedCornerShape(16.dp)
@@ -1830,6 +1876,11 @@ fun MainSettingsDialog(
                                                 AppThemePalette.ELITE_ACADEMY -> "Crisp crimson accents + sharp light style"
                                                 AppThemePalette.MECH_BLUEPRINT -> "Indigo blueprints & drafting-orange grid"
                                                 AppThemePalette.TERRACOTTA_EARTH -> "Eye-safe warm beige clay organic hues"
+                                                AppThemePalette.NET_RUNNER -> "Neo-Tokyo matrix hacker green console theme"
+                                                AppThemePalette.LAB_DIVERTER -> "Monochrome slate with orange vacuum tube signals"
+                                                AppThemePalette.DEEP_SPACE -> "Total cosmic void with emergency red alerts"
+                                                AppThemePalette.BRASS_ALCHEMY -> "Clockwork brass gold & library blue textures"
+                                                AppThemePalette.NEO_GENESIS -> "Evangelion anime mecha orange & purple"
                                             },
                                             style = MaterialTheme.typography.labelSmall,
                                             color = when (palette) {
@@ -1855,6 +1906,11 @@ fun MainSettingsDialog(
                                                         AppThemePalette.ELITE_ACADEMY -> Color(0xFFDC2626)
                                                         AppThemePalette.MECH_BLUEPRINT -> Color(0xFFFF6B35)
                                                         AppThemePalette.TERRACOTTA_EARTH -> Color(0xFFB45309)
+                                                        AppThemePalette.NET_RUNNER -> Color(0xFF00FF41)
+                                                        AppThemePalette.LAB_DIVERTER -> Color(0xFFF97316)
+                                                        AppThemePalette.DEEP_SPACE -> Color(0xFFEF4444)
+                                                        AppThemePalette.BRASS_ALCHEMY -> Color(0xFFFACC15)
+                                                        AppThemePalette.NEO_GENESIS -> Color(0xFFD946EF)
                                                     },
                                                     CircleShape
                                                 )
@@ -1870,6 +1926,11 @@ fun MainSettingsDialog(
                                                         AppThemePalette.ELITE_ACADEMY -> Color(0xFF1E293B)
                                                         AppThemePalette.MECH_BLUEPRINT -> Color(0xFF42FD93)
                                                         AppThemePalette.TERRACOTTA_EARTH -> Color(0xFF047857)
+                                                        AppThemePalette.NET_RUNNER -> Color(0xFF33CC33)
+                                                        AppThemePalette.LAB_DIVERTER -> Color(0xFFEA580C)
+                                                        AppThemePalette.DEEP_SPACE -> Color(0xFFB91C1C)
+                                                        AppThemePalette.BRASS_ALCHEMY -> Color(0xFFCA8A04)
+                                                        AppThemePalette.NEO_GENESIS -> Color(0xFFF97316)
                                                     },
                                                     CircleShape
                                                 )
@@ -2417,7 +2478,11 @@ fun isToday(timestampMillis: Long): Boolean {
 }
 
 @Composable
-fun HeroLevelCard(levelInfo: UserLevelInfo) {
+fun HeroLevelCard(
+    levelInfo: UserLevelInfo,
+    activeOutfit: String = "default",
+    unlockedSet: Set<String> = emptySet()
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2453,18 +2518,34 @@ fun HeroLevelCard(levelInfo: UserLevelInfo) {
                         color = CosmosTextPrimary
                     )
                 }
+                
+                // Displays the user's Dynamic Profile Avatar with currently equipped character outfit!
                 Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .background(ElectroPurple, CircleShape),
+                    modifier = Modifier.size(54.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Lv ${levelInfo.level}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
+                    AvatarProfileView(
+                        equippedSkinId = activeOutfit,
+                        unlockedSet = unlockedSet,
+                        modifier = Modifier.fillMaxSize()
                     )
+                    
+                    // Small overlay at the bottom end displaying the numeric Level super cleanly
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .background(ElectroPurple, RoundedCornerShape(6.dp))
+                            .border(1.dp, CosmosSurface, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Lv ${levelInfo.level}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            fontSize = 8.sp
+                        )
+                    }
                 }
             }
 
@@ -2609,16 +2690,26 @@ fun TaskRow(
         finishedListener = { isClickAnimating = false }
     )
 
-    val isOverclockActive = activePotionEffects["overclock_elixir"]?.let { it > System.currentTimeMillis() } ?: false
+    val isOverclockActive = ((activePotionEffects["overclock"] ?: activePotionEffects["overclock_elixir"])?.let { it > System.currentTimeMillis() } ?: false)
     val isFreezeActive = activePotionEffects["freeze_potion"]?.let { it > System.currentTimeMillis() } ?: false
     val isSpartansVowActive = activePotionEffects["spartans_vow"]?.let { it > System.currentTimeMillis() } ?: false
     val isMidnightOiled = midnightOilTaskIds.contains(task.id)
-    val isGreyedOut = isSpartansVowActive && (task.category.lowercase(Locale.ROOT) == "entertainment" || task.category.lowercase(Locale.ROOT) == "others")
+    val isGreyedOut = isSpartansVowActive && (
+        task.category.lowercase(Locale.ROOT) == "entertainment" || 
+        task.category.lowercase(Locale.ROOT) == "others" || 
+        task.category.lowercase(Locale.ROOT) == "personal"
+    )
 
     val cardBorder = if (isFrog) {
         BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF4ADE80), Color(0xFF22C55E))))
     } else if (task.isCompleted) {
         BorderStroke(1.dp, CosmosSurfaceLight.copy(alpha = 0.3f))
+    } else if (isMidnightOiled) {
+        BorderStroke(1.5.dp, Color(0xFFEF4444))
+    } else if (isOverclockActive) {
+        BorderStroke(1.5.dp, Color(0xFFF59E0B))
+    } else if (isFreezeActive) {
+        BorderStroke(1.5.dp, Color(0xFF60A5FA))
     } else {
         BorderStroke(
             1.dp,
@@ -2633,7 +2724,7 @@ fun TaskRow(
     Box(modifier = Modifier.fillMaxWidth()) {
         Card(
             modifier = Modifier
-                .graphicsLayer(scaleX = scale, scaleY = scale, alpha = if (isGreyedOut) 0.4f else 1f)
+                .graphicsLayer(scaleX = scale, scaleY = scale, alpha = if (isGreyedOut) 0.5f else 1f)
                 .fillMaxWidth()
                 .testTag("task_item_card_${task.id}"),
             colors = CardDefaults.cardColors(
@@ -2841,7 +2932,10 @@ fun TaskRow(
                         var xpText = "+${displayXp} XP"
                         var xpColor = NeonCyan
 
-                        if (isMidnightOiled) {
+                        if (task.usedMidnightOil) {
+                            xpText = "0 XP"
+                            xpColor = Color(0xFF991B1B) // Dark Red for Midnight Oil trade-off reminder
+                        } else if (isMidnightOiled) {
                             xpText = "0 XP"
                             xpColor = Color(0xFFEF4444)
                         } else {
@@ -5518,23 +5612,26 @@ fun ActiveEffectsHUD(
                 activeList.forEach { (potionId, expiry) ->
                     val name = when (potionId) {
                         "freeze_potion" -> "Freeze Potion"
-                        "overclock_elixir" -> "Overclock Elixir"
+                        "overclock_elixir", "overclock" -> "Overclock Elixir"
                         "midnight_oil" -> "Midnight Oil"
                         "spartans_vow" -> "Spartan's Vow"
+                        "burnout" -> "Burnout"
                         else -> potionId.replace("_", " ").replaceFirstChar { it.uppercase() }
                     }
                     val emoji = when (potionId) {
                         "freeze_potion" -> "❄️"
-                        "overclock_elixir" -> "⚡"
+                        "overclock_elixir", "overclock" -> "⚡"
                         "midnight_oil" -> "🛢️"
                         "spartans_vow" -> "🛡️"
+                        "burnout" -> "🥵"
                         else -> "🧪"
                      }
                      val badgeColor = when (potionId) {
                         "freeze_potion" -> Color(0xFF60A5FA)
-                        "overclock_elixir" -> Color(0xFFF59E0B)
+                        "overclock_elixir", "overclock" -> Color(0xFFF59E0B)
                         "midnight_oil" -> Color(0xFFEF4444)
                         "spartans_vow" -> Color(0xFFEC4899)
+                        "burnout" -> Color(0xFF9CA3AF)
                         else -> ElectroPurple
                      }
 
