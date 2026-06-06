@@ -20,7 +20,6 @@ This entire application was completely built using **Google AI Studio** via iter
 
 *   **Urgency & Importance Matrix:** Automatically categorize tasks to prioritize what truly matters.
 *   **RPG Economy & XP:** Earn experience points by completing tasks and maintaining daily streaks.
-*   **The Apothecary (Shop):** Spend hard-earned XP on strategic potions that alter app mechanics (e.g., *Overclock Elixir* for 2x XP, *Spartan's Vow* to lock non-work tasks).
 *   **Dynamic Customization:** Purchase themes and character avatars that dynamically update the app's global state and UI.
 *   **Active Analytics:** Track your focus through a daily study calendar heatmap and reflection archives.
 
