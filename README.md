@@ -57,4 +57,5 @@ If you want to test the app yourself, you can run it using Android Studio.
 **Engineered and Prompted by:** Mitali Unawane  
 **Status:** Open to suggestions, feature requests, and modifications! Feel free to fork the repository and submit a pull request.
 
+*This project is licensed under the MIT License - see the LICENSE file for details.*
 
