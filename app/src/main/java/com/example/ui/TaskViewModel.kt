@@ -13,19 +13,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.*
 
-const val LevelingConstant = 15.0
-
 fun calculateLevel(xp: Int): Int {
-    return (Math.floor(LevelingConstant * Math.log(xp.toDouble() + 1.0)) + 1.0).toInt()
+    return (Math.floor(0.05 * Math.sqrt(xp.toDouble())) + 1.0).toInt()
 }
 
-fun getXpForLevel(level: Int): Int {
+fun getCurrentLevelBaseXp(level: Int): Int {
     if (level <= 1) return 0
-    return Math.ceil(Math.exp((level - 1.0) / LevelingConstant) - 1.0).toInt().coerceAtLeast(0)
+    return Math.pow((level.toDouble() - 1.0) / 0.05, 2.0).toInt()
 }
 
 fun getXpForNextLevel(currentLevel: Int): Int {
-    return getXpForLevel(currentLevel + 1)
+    return Math.pow(currentLevel.toDouble() / 0.05, 2.0).toInt()
 }
 
 class TaskViewModel(application: Application) : AndroidViewModel(application) {
@@ -100,7 +98,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     val userLevelState: StateFlow<UserLevelInfo> = totalXpFlow.map { xp ->
         val safeXp = xp ?: 0
         val level = calculateLevel(safeXp)
-        val currentLevelBaseXP = getXpForLevel(level)
+        val currentLevelBaseXP = getCurrentLevelBaseXp(level)
         val nextLevelXP = getXpForNextLevel(level)
         val range = nextLevelXP - currentLevelBaseXP
         val fraction = if (range > 0) {
@@ -369,21 +367,35 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         _activePotionEffects.value = emptyMap()
     }
 
+    fun getLogicalTodayString(timestamp: Long = System.currentTimeMillis()): String {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        if (hour < 4) {
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        }
+        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
+    }
+
     private fun isBeforeYesterday(lastCompletedMs: Long): Boolean {
         if (lastCompletedMs == 0L) return false
-        val lastComp = Calendar.getInstance().apply { timeInMillis = lastCompletedMs }
+        val lastCompletedLogicalStr = getLogicalTodayString(lastCompletedMs)
+        val todayLogicalStr = getLogicalTodayString(System.currentTimeMillis())
         
-        val todayZero = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        try {
+            val lastDate = sdf.parse(lastCompletedLogicalStr) ?: return false
+            val todayDate = sdf.parse(todayLogicalStr) ?: return false
+            
+            val calendar = java.util.Calendar.getInstance().apply {
+                time = lastDate
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+            val yesterdayPlusOneStr = sdf.format(calendar.time)
+            
+            return yesterdayPlusOneStr < todayLogicalStr
+        } catch (e: Exception) {
+            return false
         }
-        val yesterdayZero = (todayZero.clone() as Calendar).apply {
-            add(Calendar.DAY_OF_YEAR, -1)
-        }
-        
-        return lastComp.before(yesterdayZero)
     }
 
     fun checkForDailyReset() {
@@ -394,26 +406,21 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             val now = System.currentTimeMillis()
             val lastCheckedDay = sharedPrefs.getLong("last_streak_check_millis", 0L)
             
-            val todayZero = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            
-            val lastCheckedCal = Calendar.getInstance().apply { timeInMillis = lastCheckedDay }
-            val isNewDay = lastCheckedDay == 0L || lastCheckedCal.before(todayZero)
+            val lastCheckedLogicalStr = getLogicalTodayString(lastCheckedDay)
+            val todayLogicalStr = getLogicalTodayString(now)
+            val isNewDay = lastCheckedDay == 0L || lastCheckedLogicalStr < todayLogicalStr
             
             if (isNewDay) {
                 sharedPrefs.edit().putLong("last_streak_check_millis", now).apply()
                 sharedPrefs.edit().putBoolean("is_day_frozen", false).apply()
                 _isDayFrozen.value = false
+                refreshFrogTask()
 
                 val brokenTasks = tasks.filter { it.isRecurring && it.streak > 0 && isBeforeYesterday(it.lastCompletedAt) }
                 
                 if (brokenTasks.isNotEmpty()) {
                     brokenTasks.forEach { task ->
-                        taskDao.updateTaskCompletionState(task.id, task.isCompleted, 0, task.lastCompletedAt, task.lastCompletedDate, task.history)
+                        taskDao.updateTaskCompletionState(task.id, task.isCompleted, 0, task.lastCompletedAt, task.lastCompletedDate, task.completedOnLogicalDate, task.history)
                     }
                 }
             }
@@ -422,8 +429,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     fun checkAndResetHabits() {
         viewModelScope.launch(Dispatchers.IO) {
-            val format = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            val todayStr = format.format(java.util.Date())
+            val todayStr = getLogicalTodayString()
             val tasks = repository.allTasksFlow.firstOrNull() ?: emptyList()
             tasks.forEach { task ->
                 if (task.isRecurring && task.isCompleted && task.lastCompletedDate < todayStr) {
@@ -596,8 +602,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 // Get current total XP prior to completing
                 val currentXp = totalXpFlow.first() ?: 0
-                val xpPerLevel = 200
-                val oldLevel = (currentXp / xpPerLevel) + 1
+                val oldLevel = calculateLevel(currentXp)
                 
                 // Complete task and get calculated XP (includes Category, Difficulty & Streak multipliers and Potion modifiers)
                 val xpEarned = repository.completeTask(
@@ -607,14 +612,9 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                     midnightOilTaskIds = _midnightOilTaskIds.value
                 )
                 
-                // Milestone Check: if (currentXP + rewardedXP >= targetXP)
-                val currentXP = currentXp
-                val rewardedXP = xpEarned
-                val targetXP = oldLevel * xpPerLevel
+                val newLevel = calculateLevel(currentXp + xpEarned)
                 
-                if (currentXP + rewardedXP >= targetXP) {
-                    val newLevel = ((currentXP + rewardedXP) / xpPerLevel) + 1
-                    val nextLevelTargetXp = newLevel * xpPerLevel
+                if (newLevel > oldLevel) {
                     _levelUpEvent.emit(LevelUpEvent(oldLevel = oldLevel, newLevel = newLevel, xpEarned = xpEarned))
                 }
             }
@@ -650,8 +650,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 val currentXp = totalXpFlow.first() ?: 0
-                val xpPerLevel = 200
-                val oldLevel = (currentXp / xpPerLevel) + 1
+                val oldLevel = calculateLevel(currentXp)
 
                 val xpEarned = repository.completeTask(
                     task = task,
@@ -668,12 +667,9 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                     repository.updateTask(updatedTask.copy(isCompleted = true))
                 }
 
-                val currentXP = currentXp
-                val rewardedXP = xpEarned
-                val targetXP = oldLevel * xpPerLevel
+                val newLevel = calculateLevel(currentXp + xpEarned)
 
-                if (currentXP + rewardedXP >= targetXP) {
-                    val newLevel = ((currentXP + rewardedXP) / xpPerLevel) + 1
+                if (newLevel > oldLevel) {
                     _levelUpEvent.emit(LevelUpEvent(oldLevel = oldLevel, newLevel = newLevel, xpEarned = xpEarned))
                 }
             }
@@ -768,8 +764,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                     taskDao.insertCompletion(focusBonusCompletion)
 
                     val currentXp = totalXpFlow.first() ?: 0
-                    val xpPerLevel = 200
-                    val oldLevel = (currentXp / xpPerLevel) + 1
+                    val oldLevel = calculateLevel(currentXp)
 
                     // Auto-complete actual task/habit if selected
                     _activeFocusTask.value?.let { task ->
@@ -778,14 +773,10 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                    // Milestone Check: if (currentXP + rewardedXP >= targetXP)
-                    val currentXP = currentXp
-                    val rewardedXP = xpEarned
-                    val targetXP = oldLevel * xpPerLevel
+                    val afterXp = totalXpFlow.first() ?: (currentXp + xpEarned)
+                    val newLevel = calculateLevel(afterXp)
                     
-                    if (currentXP + rewardedXP >= targetXP) {
-                        val newLevel = ((currentXP + rewardedXP) / xpPerLevel) + 1
-                        val nextLevelTargetXp = newLevel * xpPerLevel
+                    if (newLevel > oldLevel) {
                         _levelUpEvent.emit(LevelUpEvent(oldLevel = oldLevel, newLevel = newLevel, xpEarned = xpEarned))
                     }
                 }
@@ -804,11 +795,15 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- "Eat the Frog" (Most Important Task) ---
     private fun getTodayDateStr(): String {
-        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        return getLogicalTodayString()
     }
 
     private val _frogTaskId = MutableStateFlow(sharedPrefs.getInt("eat_the_frog_task_id_${getTodayDateStr()}", 0))
     val frogTaskId: StateFlow<Int> = _frogTaskId.asStateFlow()
+
+    fun refreshFrogTask() {
+        _frogTaskId.value = sharedPrefs.getInt("eat_the_frog_task_id_${getTodayDateStr()}", 0)
+    }
 
     fun tagEatTheFrog(taskId: Int) {
         val todayStr = getTodayDateStr()

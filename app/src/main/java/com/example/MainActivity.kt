@@ -463,6 +463,23 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
 
     // Aesthetic level-up state listener
     var showLevelUpDialog by remember { mutableStateOf<TaskViewModel.LevelUpEvent?>(null) }
+
+    val userLevelStateCheck by viewModel.userLevelState.collectAsState()
+    val equippedSkinIdCheck by viewModel.equippedSkinId.collectAsState()
+
+    LaunchedEffect(userLevelStateCheck.level, equippedSkinIdCheck) {
+        val currentLevel = userLevelStateCheck.level
+        val requiredLevel = when (equippedSkinIdCheck) {
+            "neo_novice" -> 2
+            "quantum_architect" -> 3
+            "hyperion_voyager" -> 5
+            "grandmaster_ai" -> 5
+            else -> 0
+        }
+        if (equippedSkinIdCheck != "default" && currentLevel < requiredLevel) {
+            viewModel.equipSkin("default")
+        }
+    }
     
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(viewModel) {
@@ -1338,6 +1355,15 @@ fun GamificationJsonDialog(onDismiss: () -> Unit) {
     )
 }
 
+fun getLogicalTodayString(): String {
+    val cal = java.util.Calendar.getInstance()
+    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+    }
+    return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
+}
+
 @Composable
 fun DashboardScreen(
     viewModel: TaskViewModel,
@@ -1358,22 +1384,41 @@ fun DashboardScreen(
     val activeOutfit by viewModel.activeOutfit.collectAsState()
     val unlockedSet by viewModel.unlockedRewardsIdsFlow.collectAsState()
 
+    var logicalTodayString by remember { mutableStateOf(getLogicalTodayString()) }
+
     LaunchedEffect(Unit) {
         viewModel.checkAndResetHabits()
+        while (true) {
+            delay(10000) // check every 10 seconds for rollover
+            val currentLogical = getLogicalTodayString()
+            if (logicalTodayString != currentLogical) {
+                logicalTodayString = currentLogical
+                viewModel.refreshFrogTask()
+            }
+        }
     }
 
     var energyFilter by remember { mutableStateOf("All") }
 
-    val filteredTasks = tasks.filter { !it.isRecurring }.filter { task ->
-        val passCategory = filterCategory == null || task.category == filterCategory
-        val energy = getTaskEnergyLevel(task.title)
-        val passEnergy = when (energyFilter) {
-            "Low" -> energy == "Low Brainpower"
-            "Steady" -> energy == "Medium/Steady"
-            "High" -> energy == "High Focus"
-            else -> true
+    val tasksForToday = remember(tasks, logicalTodayString) {
+        tasks.filter { task ->
+            val taskAssignedStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(task.assignedDateMillis))
+            taskAssignedStr == logicalTodayString
         }
-        passCategory && passEnergy
+    }
+
+    val filteredTasks = remember(tasksForToday, filterCategory, energyFilter) {
+        tasksForToday.filter { !it.isRecurring }.filter { task ->
+            val passCategory = filterCategory == null || task.category == filterCategory
+            val energy = getTaskEnergyLevel(task.title)
+            val passEnergy = when (energyFilter) {
+                "Low" -> energy == "Low Brainpower"
+                "Steady" -> energy == "Medium/Steady"
+                "High" -> energy == "High Focus"
+                else -> true
+            }
+            passCategory && passEnergy
+        }
     }
 
     // Sort tasks so the designated "Eat the Frog" (MIT) task sits at the very top of the list
@@ -1381,8 +1426,8 @@ fun DashboardScreen(
         filteredTasks.sortedByDescending { it.id == frogTaskId }
     }
 
-    val frogTask = remember(tasks, frogTaskId) {
-        tasks.find { it.id == frogTaskId }
+    val frogTask = remember(tasksForToday, frogTaskId) {
+        tasksForToday.find { it.id == frogTaskId }
     }
 
     val ordinaryTasks = remember(sortedTasks, frogTaskId) {
@@ -1571,6 +1616,7 @@ fun DashboardScreen(
                 color = CosmosTextSecondary
             )
             CategoryFiltersRow(
+                tasks = tasks,
                 selectedFilter = filterCategory,
                 onSelected = { viewModel.setCategoryFilter(it) }
             )
@@ -2002,8 +2048,13 @@ fun MainSettingsDialog(
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     val activeSkin = MilestoneSystem.unlockablesList.firstOrNull { it.id == equippedSkinId }
+                                    val displayProfileTitle = if (equippedSkinId != "default" && activeSkin != null) {
+                                        activeSkin.name
+                                    } else {
+                                        "Hero Champion"
+                                    }
                                     Text(
-                                        text = activeSkin?.name ?: "Cyber Silhouette",
+                                        text = displayProfileTitle,
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = CosmosTextPrimary
@@ -2037,6 +2088,24 @@ fun MainSettingsDialog(
                         MilestoneSystem.unlockablesList.forEach { reward ->
                             val isUnlocked = unlockedSet.contains(reward.id)
                             val isEquipped = equippedSkinId == reward.id
+
+                            val levelRequired = when (reward.id) {
+                                "neo_novice" -> 2
+                                "quantum_architect" -> 3
+                                "hyperion_voyager" -> 5
+                                "grandmaster_ai" -> 5
+                                else -> 0
+                            }
+                            val displayCondition = if (levelRequired > 0) {
+                                val xpTarget = Math.pow((levelRequired - 1.0) / 0.05, 2.0).toInt()
+                                if (reward.id == "grandmaster_ai") {
+                                    "Complete 10 Work tasks & Reach Level 5 (${xpTarget} XP)"
+                                } else {
+                                    "Reach Level $levelRequired (${xpTarget} XP)"
+                                }
+                            } else {
+                                reward.unlockConditionDesc
+                            }
                             
                             Card(
                                 modifier = Modifier
@@ -2107,7 +2176,7 @@ fun MainSettingsDialog(
                                             color = if (isUnlocked) CosmosTextSecondary else CosmosTextSecondary.copy(alpha = 0.6f)
                                         )
                                         Text(
-                                            text = "Requires: " + reward.unlockConditionDesc,
+                                            text = "Requires: " + displayCondition,
                                             fontSize = 8.sp,
                                             color = if (isUnlocked) Color(0xFF06B6D4) else Color(0xFFEF4444),
                                             fontWeight = FontWeight.Bold
@@ -2502,6 +2571,13 @@ fun HeroLevelCard(
     activeOutfit: String = "default",
     unlockedSet: Set<String> = emptySet()
 ) {
+    val activeSkin = com.example.data.models.MilestoneSystem.unlockablesList.firstOrNull { it.id == activeOutfit }
+    val displayHeroTitle = if (activeOutfit != "default" && activeSkin != null) {
+        activeSkin.name
+    } else {
+        "Hero Champion"
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2530,7 +2606,7 @@ fun HeroLevelCard(
                         color = ElectroPurple
                     )
                     Text(
-                        text = "Hero champion",
+                        text = displayHeroTitle,
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Black
                         ),
@@ -2694,21 +2770,35 @@ fun EnergyFiltersRow(
 
 @Composable
 fun CategoryFiltersRow(
+    tasks: List<Task>,
     selectedFilter: String?,
     onSelected: (String?) -> Unit
 ) {
+    val defaultCategories = listOf("Work", "Personal", "Others")
+    val taskCategories = tasks.map { it.category }.filter { it.isNotBlank() }
+    val dynamicCategories = (defaultCategories + taskCategories)
+        .map { it.trim() }
+        .distinct()
+
+    val categories = listOf(null) + dynamicCategories
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        val categories = listOf(null, "Work", "Personal", "Others")
-        val labels = listOf("💎 All", "💼 Work", "🧘 Personal", "🧭 Others")
-
-        categories.forEachIndexed { idx, cat ->
+        categories.forEach { cat ->
             val isSelected = selectedFilter == cat
+            val label = when (cat) {
+                null -> "💎 All"
+                "Work" -> "💼 Work"
+                "Personal" -> "🧘 Personal"
+                "Others" -> "🧭 Others"
+                else -> "🏷️ $cat"
+            }
             Box(
                 modifier = Modifier
-                    .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (isSelected) ElectroPurple else CosmosSurface)
                     .border(
@@ -2719,14 +2809,16 @@ fun CategoryFiltersRow(
                         RoundedCornerShape(10.dp)
                     )
                     .clickable { onSelected(cat) }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 8.dp, horizontal = 12.dp)
+                    .testTag("category_filter_${cat ?: "all"}"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = labels[idx],
+                    text = label,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (isSelected) Color.White else CosmosTextSecondary
+                    color = if (isSelected) Color.White else CosmosTextSecondary,
+                    maxLines = 1
                 )
             }
         }

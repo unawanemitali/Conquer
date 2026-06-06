@@ -288,12 +288,28 @@ object MilestoneSystem {
         maxStreak: Int
     ): Boolean {
         if (item.isXpMilestone) {
+            val levelRequired = when (item.id) {
+                "neo_novice" -> 2
+                "quantum_architect" -> 3
+                "hyperion_voyager" -> 5
+                else -> 0
+            }
+            if (levelRequired > 0) {
+                val neededXp = Math.pow((levelRequired - 1.0) / 0.05, 2.0).toInt()
+                return totalXp >= neededXp
+            }
             return totalXp >= item.xpRequired
         }
         if (item.categoryRequired != null) {
             val countCompleted = categoryCounts[item.categoryRequired] ?: 0
             val meetsCount = countCompleted >= item.completionCountReq
-            val meetsXp = totalXp >= item.xpRequired
+            val levelRequired = if (item.id == "grandmaster_ai") 5 else 0
+            val meetsXp = if (levelRequired > 0) {
+                val neededXp = Math.pow((levelRequired - 1.0) / 0.05, 2.0).toInt()
+                totalXp >= neededXp
+            } else {
+                totalXp >= item.xpRequired
+            }
             return meetsCount && meetsXp
         }
         if (item.streakRequired > 0) {

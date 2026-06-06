@@ -25,8 +25,8 @@ interface TaskDao {
     @Query("DELETE FROM task_completions WHERE taskId = :taskId")
     suspend fun deleteCompletionsByTaskId(taskId: Int)
 
-    @Query("UPDATE tasks SET isCompleted = :isCompleted, streak = :streak, lastCompletedAt = :lastCompletedAt, lastCompletedDate = :lastCompletedDate, history = :history WHERE id = :id")
-    suspend fun updateTaskCompletionState(id: Int, isCompleted: Boolean, streak: Int, lastCompletedAt: Long, lastCompletedDate: String, history: List<String>)
+    @Query("UPDATE tasks SET isCompleted = :isCompleted, streak = :streak, lastCompletedAt = :lastCompletedAt, lastCompletedDate = :lastCompletedDate, completedOnLogicalDate = :completedOnLogicalDate, history = :history WHERE id = :id")
+    suspend fun updateTaskCompletionState(id: Int, isCompleted: Boolean, streak: Int, lastCompletedAt: Long, lastCompletedDate: String, completedOnLogicalDate: String, history: List<String>)
 
 
     // --- TaskCompletion Time-Series Queries ---

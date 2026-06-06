@@ -616,85 +616,107 @@ data class AnalyticsPackage(
     val monthlyIntervals: List<MonthlyInterval>
 )
 
+private fun getLogicalDateStr(timestamp: Long): String {
+    val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+}
+
+private fun getLogicalDateFromDaysAgo(daysAgo: Int): String {
+    val cal = Calendar.getInstance()
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+    cal.add(Calendar.DAY_OF_YEAR, -daysAgo)
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+}
+
+private fun getTimestampOfStartOfLogicalDate(logicalDateStr: String): Long {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    return try {
+        sdf.parse(logicalDateStr)?.time ?: System.currentTimeMillis()
+    } catch (e: Exception) {
+        System.currentTimeMillis()
+    }
+}
+
+private fun getLogicalWeekStart(baseTimestamp: Long = System.currentTimeMillis()): String {
+    val cal = Calendar.getInstance().apply { timeInMillis = baseTimestamp }
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+    cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+}
+
 private fun processAnalyticsData(
     completions: List<TaskCompletion>,
     focusSessions: List<FocusSession>
 ): AnalyticsPackage {
-    val checker = Calendar.getInstance()
-    val now = checker.timeInMillis
-
     // 1. Process Heatmap Days: last 35 days (5 columns * 7 days)
     val heatmapList = ArrayList<ProcessedDay>()
     for (i in (34 downTo 0)) {
-        val loopCal = Calendar.getInstance()
-        loopCal.add(Calendar.DAY_OF_YEAR, -i)
-        
-        // Zero outer params to compare pure day ranges
-        loopCal.set(Calendar.HOUR_OF_DAY, 0)
-        loopCal.set(Calendar.MINUTE, 0)
-        loopCal.set(Calendar.SECOND, 0)
-        loopCal.set(Calendar.MILLISECOND, 0)
-        val dayStart = loopCal.timeInMillis
-
-        loopCal.set(Calendar.HOUR_OF_DAY, 23)
-        loopCal.set(Calendar.MINUTE, 59)
-        loopCal.set(Calendar.SECOND, 59)
-        val dayEnd = loopCal.timeInMillis
-
-        val daySessions = focusSessions.filter { it.completedAt in dayStart..dayEnd }
+        val targetLogicalStr = getLogicalDateFromDaysAgo(i)
+        // Find all focus sessions that completed on this logical date
+        val daySessions = focusSessions.filter { getLogicalDateStr(it.completedAt) == targetLogicalStr }
         val sumSeconds = daySessions.sumOf { it.durationSeconds }
-
-        heatmapList.add(ProcessedDay(dayStart, sumSeconds, daySessions.size))
+        val targetTimestamp = getTimestampOfStartOfLogicalDate(targetLogicalStr)
+        heatmapList.add(ProcessedDay(targetTimestamp, sumSeconds, daySessions.size))
     }
 
     // 2. Process Radar: Current Week XP per Category from completions
-    val thisWeekCal = Calendar.getInstance()
-    thisWeekCal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-    thisWeekCal.set(Calendar.HOUR_OF_DAY, 0)
-    thisWeekCal.set(Calendar.MINUTE, 0)
-    val weekStart = thisWeekCal.timeInMillis
-
-    val thisWeekCompletions = completions.filter { it.completedAt >= weekStart }
+    val currentWeekStartStr = getLogicalWeekStart()
+    val thisWeekCompletions = completions.filter {
+        val compLogical = if (it.completedOnLogicalDate.isNotEmpty()) it.completedOnLogicalDate else getLogicalDateStr(it.completedAt)
+        compLogical >= currentWeekStartStr
+    }
     val workXp = thisWeekCompletions.filter { it.taskCategory.lowercase(Locale.ROOT) == "work" }.sumOf { it.xpEarned }
     val personalXp = thisWeekCompletions.filter { it.taskCategory.lowercase(Locale.ROOT) == "personal" }.sumOf { it.xpEarned }
     val entertainerXp = thisWeekCompletions.filter { it.taskCategory.lowercase(Locale.ROOT) == "entertainment" }.sumOf { it.xpEarned }
 
-    // Strip out all mock/demo fallbacks to enforce clean production database values
-    val safeWorkXp = workXp
-    val safePersonalXp = personalXp
-    val safeEntertainerXp = entertainerXp
-
-    // 3. Process line chart correlation: 4 weekly nodes in the current month
+    // 3. Process line chart correlation: 5 weekly nodes in the current month
     val intervals = ArrayList<MonthlyInterval>()
-    val monthlyStartCal = Calendar.getInstance()
-    monthlyStartCal.set(Calendar.DAY_OF_MONTH, 1)
-    
+    val todayLogicalStr = getLogicalDateStr(System.currentTimeMillis())
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val parsedDate = try { sdf.parse(todayLogicalStr) } catch(e: Exception) { Date() }
+    val currentLogicalMonthCal = Calendar.getInstance().apply { time = parsedDate }
+    currentLogicalMonthCal.set(Calendar.DAY_OF_MONTH, 1)
+
     for (week in 1..5) {
-        val startOfWeekCal = Calendar.getInstance()
-        startOfWeekCal.timeInMillis = monthlyStartCal.timeInMillis
-        startOfWeekCal.add(Calendar.DAY_OF_YEAR, (week - 1) * 7)
-        startOfWeekCal.set(Calendar.HOUR_OF_DAY, 0)
-        val rangeStart = startOfWeekCal.timeInMillis
+        val startCal = Calendar.getInstance().apply {
+            time = currentLogicalMonthCal.time
+            add(Calendar.DAY_OF_YEAR, (week - 1) * 7)
+        }
+        val startLogicalStr = sdf.format(startCal.time)
 
-        startOfWeekCal.add(Calendar.DAY_OF_YEAR, 6)
-        startOfWeekCal.set(Calendar.HOUR_OF_DAY, 23)
-        val rangeEnd = startOfWeekCal.timeInMillis
+        val endCal = Calendar.getInstance().apply {
+            time = startCal.time
+            add(Calendar.DAY_OF_YEAR, 6)
+        }
+        val endLogicalStr = sdf.format(endCal.time)
 
-        val focusMins = focusSessions.filter { it.completedAt in rangeStart..rangeEnd }.sumOf { it.durationSeconds } / 60
-        val xpGained = completions.filter { it.completedAt in rangeStart..rangeEnd }.sumOf { it.xpEarned }
+        val focusMins = focusSessions.filter {
+            getLogicalDateStr(it.completedAt) in startLogicalStr..endLogicalStr
+        }.sumOf { it.durationSeconds } / 60
 
-        // Strip out baseline curve logic for monthly views to reflect pure actual data
-        val finalMinutes = focusMins
-        val finalXp = xpGained
+        val xpGained = completions.filter {
+            val compLogical = if (it.completedOnLogicalDate.isNotEmpty()) it.completedOnLogicalDate else getLogicalDateStr(it.completedAt)
+            compLogical in startLogicalStr..endLogicalStr
+        }.sumOf { it.xpEarned }
 
-        intervals.add(MonthlyInterval("Week $week", finalMinutes, finalXp))
+        intervals.add(MonthlyInterval("Week $week", focusMins, xpGained))
     }
 
     return AnalyticsPackage(
         heatmapDays = heatmapList,
-        weeklyWorkXp = safeWorkXp,
-        weeklyPersonalXp = safePersonalXp,
-        weeklyEntertainmentXp = safeEntertainerXp,
+        weeklyWorkXp = workXp,
+        weeklyPersonalXp = personalXp,
+        weeklyEntertainmentXp = entertainerXp,
         monthlyIntervals = intervals
     )
 }

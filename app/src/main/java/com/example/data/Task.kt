@@ -20,6 +20,7 @@ data class Task(
     val priorityQuadrant: String = "Not Urgent & Unimportant",
     val usedMidnightOil: Boolean = false,
     val lastCompletedDate: String = "",
+    val completedOnLogicalDate: String = "",
     val history: List<String> = emptyList()
 )
 
@@ -37,7 +38,8 @@ data class TaskCompletion(
     val taskTitle: String,
     val taskCategory: String, // To easily group history even if task changes
     val completedAt: Long = System.currentTimeMillis(),
-    val xpEarned: Int = 10
+    val xpEarned: Int = 10,
+    val completedOnLogicalDate: String = ""
 )
 
 @Entity(tableName = "focus_sessions")

@@ -39,6 +39,15 @@ class TaskRepository(
     suspend fun getDailyNoteByDate(dateStr: String): DailyNote? = taskDao.getDailyNoteByDate(dateStr)
     suspend fun insertDailyNote(note: DailyNote) = taskDao.insertDailyNote(note)
 
+    private fun getLogicalTodayString(timestamp: Long = System.currentTimeMillis()): String {
+        val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        if (hour < 4) {
+            cal.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+    }
+
     /**
      * Mark a task as completed or uncompleted.
      * Completing a task logs a TaskCompletion entry in our time-series log,
@@ -50,32 +59,43 @@ class TaskRepository(
         activePotions: Map<String, Long> = emptyMap(),
         midnightOilTaskIds: Set<Int> = emptySet()
     ): Int {
-        val updatedStreak = if (task.isRecurring) {
-            val lastCompCalendar = Calendar.getInstance().apply { timeInMillis = task.lastCompletedAt }
-            val currentCalendar = Calendar.getInstance().apply { timeInMillis = timestamp }
-            
-            val isNextDay = isConsecutiveDay(lastCompCalendar, currentCalendar)
-            
-            if (isNextDay) {
-                task.streak + 1
-            } else if (task.lastCompletedAt == 0L) {
-                1
-            } else {
-                1
-            }
-        } else {
-            0
-        }
-
-        // Update task state in database
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val todayStr = sdf.format(Date(timestamp))
+        val todayStr = getLogicalTodayString(timestamp)
         val updatedHistory = if (task.history.contains(todayStr)) {
             task.history
         } else {
             task.history + todayStr
         }
-        taskDao.updateTaskCompletionState(task.id, true, updatedStreak, timestamp, todayStr, updatedHistory)
+
+        val updatedStreak = if (task.isRecurring) {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val historySet = updatedHistory.toSet()
+            
+            var currentStreak = 0
+            val cal = Calendar.getInstance()
+            try {
+                val todayDate = sdf.parse(todayStr)
+                if (todayDate != null) {
+                    cal.time = todayDate
+                    while (true) {
+                        val checkStr = sdf.format(cal.time)
+                        if (historySet.contains(checkStr)) {
+                            currentStreak++
+                            cal.add(Calendar.DAY_OF_YEAR, -1)
+                        } else {
+                            break
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                currentStreak = task.streak + 1
+            }
+            maxOf(currentStreak, 1)
+        } else {
+            0
+        }
+
+        // Update task state in database
+        taskDao.updateTaskCompletionState(task.id, true, updatedStreak, timestamp, todayStr, todayStr, updatedHistory)
 
         // Math-based Dynamic XP System Calculations
         val categoryFactor = when (task.category.lowercase(Locale.ROOT)) {
@@ -103,7 +123,8 @@ class TaskRepository(
             taskTitle = task.title,
             taskCategory = task.category,
             completedAt = timestamp,
-            xpEarned = xpEarned
+            xpEarned = xpEarned,
+            completedOnLogicalDate = todayStr
         )
         taskDao.insertCompletion(completion)
         return xpEarned
@@ -116,11 +137,44 @@ class TaskRepository(
         val calendar = Calendar.getInstance().apply { timeInMillis = timestamp }
         val (startOfDay, endOfDay) = getDayRange(calendar)
         
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val todayStr = sdf.format(Date(timestamp))
+        val todayStr = getLogicalTodayString(timestamp)
         val updatedHistory = task.history.filter { it != todayStr }
         taskDao.deleteCompletionForDay(task.id, startOfDay, endOfDay)
-        taskDao.updateTaskCompletionState(task.id, false, if (task.streak > 0) task.streak - 1 else 0, 0L, "", updatedHistory)
+
+        val newStreak = if (task.isRecurring) {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val sortedDates = updatedHistory.sorted()
+            if (sortedDates.isNotEmpty()) {
+                val lastDateStr = sortedDates.last()
+                val historySet = updatedHistory.toSet()
+                var currentStreak = 0
+                val cal = Calendar.getInstance()
+                try {
+                    val lastDate = sdf.parse(lastDateStr)
+                    if (lastDate != null) {
+                        cal.time = lastDate
+                        while (true) {
+                            val checkStr = sdf.format(cal.time)
+                            if (historySet.contains(checkStr)) {
+                                currentStreak++
+                                cal.add(Calendar.DAY_OF_YEAR, -1)
+                            } else {
+                                break
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    currentStreak = 0
+                }
+                currentStreak
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+
+        taskDao.updateTaskCompletionState(task.id, false, newStreak, 0L, "", "", updatedHistory)
     }
 
     // --- Optimized Time-Series Temporal Range Queries ---
@@ -444,17 +498,19 @@ class TaskRepository(
 
     private fun getDayRange(cal: Calendar): Pair<Long, Long> {
         val checkCal = cal.clone() as Calendar
-        checkCal.set(Calendar.HOUR_OF_DAY, 0)
+        checkCal.set(Calendar.HOUR_OF_DAY, 4)
         checkCal.set(Calendar.MINUTE, 0)
         checkCal.set(Calendar.SECOND, 0)
         checkCal.set(Calendar.MILLISECOND, 0)
         val start = checkCal.timeInMillis
 
-        checkCal.set(Calendar.HOUR_OF_DAY, 23)
-        checkCal.set(Calendar.MINUTE, 59)
-        checkCal.set(Calendar.SECOND, 59)
-        checkCal.set(Calendar.MILLISECOND, 999)
-        val end = checkCal.timeInMillis
+        val endCal = cal.clone() as Calendar
+        endCal.add(Calendar.DAY_OF_YEAR, 1)
+        endCal.set(Calendar.HOUR_OF_DAY, 3)
+        endCal.set(Calendar.MINUTE, 59)
+        endCal.set(Calendar.SECOND, 59)
+        endCal.set(Calendar.MILLISECOND, 999)
+        val end = endCal.timeInMillis
 
         return Pair(start, end)
     }
