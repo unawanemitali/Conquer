@@ -38,7 +38,7 @@ fun ApothecaryStoreDialog(
     viewModel: TaskViewModel,
     onDismiss: () -> Unit
 ) {
-    var activeTab by remember { mutableStateOf(0) } // 0 = Potions, 1 = Cosmetics, 2 = My Vault
+    val activeTab = 1 // Fixed to 1 to show Cosmetics directly without potion-related tabs
     
     // User stats collected from ViewModel
     val userLevel by viewModel.userLevelState.collectAsState()
@@ -65,33 +65,7 @@ fun ApothecaryStoreDialog(
 
     // Helper functions to detail trade-off mechanics as a visual pop-up
     fun getPotionEffects(potionId: String): Pair<String, String> {
-        return when (potionId) {
-            "freeze_potion" -> Pair(
-                "Stops your streaks from breaking and pauses points loss for a whole day.",
-                "You will only get half the points from newly finished tasks while active."
-            )
-            "overclock_elixir" -> Pair(
-                "Doubles the points (2x) you earn from finished tasks for a whole day.",
-                "You will lose 30 points for any task that becomes late while active."
-            )
-            "midnight_oil" -> Pair(
-                "Gives you 24 extra hours to finish your tasks on time.",
-                "Loses a quarter (25%) of your total points immediately when you drink it."
-            )
-            "spartans_vow" -> Pair(
-                "Gives you 1.5x more points when you complete Work tasks.",
-                "You cannot do other categories or hobby tasks while active."
-            )
-            "phoenix_tear" -> Pair(
-                "Saves and restores a broken streak for any of your habits immediately.",
-                "You must complete a long 50-minute study timer to turn this on."
-            )
-            "amnesia_draft" -> Pair(
-                "Allows you to delete any task safely without losing any points.",
-                "You must write a short note about why you are deleting it first."
-            )
-            else -> Pair("Gives nice boosts to help you finish your tasks.", "No bad side effects.")
-        }
+        return Pair("Gives nice boosts to help you finish your tasks.", "No bad side effects.")
     }
 
     AlertDialog(
@@ -110,110 +84,11 @@ fun ApothecaryStoreDialog(
                 )
                 
                 Text(
-                    text = "Spend your XP points here to buy helpful drinks and fun character outfits!",
+                    text = "Spend your XP points here to unlock fun character outfits and background themes!",
                     style = MaterialTheme.typography.labelSmall,
                     color = CosmosTextSecondary,
                     textAlign = TextAlign.Center
                 )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Navigation tabs for Apothecary sub-options (Splitting into Potions, Cosmetics, Vault)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Sub-option: Potions Marketplace
-                    Box(
-                        modifier = Modifier
-                            .weight(1.0f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (activeTab == 0) ElectroPurple else CosmosSurfaceLight)
-                            .clickable { activeTab = 0 }
-                            .padding(vertical = 8.dp)
-                            .testTag("apothecary_market_tab"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ShoppingCart,
-                                contentDescription = "Potions",
-                                tint = if (activeTab == 0) Color.White else CosmosTextSecondary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "Potions",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (activeTab == 0) Color.White else CosmosTextSecondary
-                            )
-                        }
-                    }
-
-                    // Sub-option: Cosmetics Store
-                    Box(
-                        modifier = Modifier
-                            .weight(1.1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (activeTab == 1) ElectroPurple else CosmosSurfaceLight)
-                            .clickable { activeTab = 1 }
-                            .padding(vertical = 8.dp)
-                            .testTag("apothecary_cosmetics_tab"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Face,
-                                contentDescription = "Cosmetics",
-                                tint = if (activeTab == 1) Color.White else CosmosTextSecondary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "Cosmetics",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (activeTab == 1) Color.White else CosmosTextSecondary
-                            )
-                        }
-                    }
-
-                    // Sub-option: Vault (Inventory)
-                    Box(
-                        modifier = Modifier
-                            .weight(0.9f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (activeTab == 2) ElectroPurple else CosmosSurfaceLight)
-                            .clickable { activeTab = 2 }
-                            .padding(vertical = 8.dp)
-                            .testTag("apothecary_vault_tab"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = "Vault",
-                                tint = if (activeTab == 1) Color.White else CosmosTextSecondary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "Vault",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (activeTab == 2) Color.White else CosmosTextSecondary
-                            )
-                        }
-                    }
-                }
             }
         },
         text = {

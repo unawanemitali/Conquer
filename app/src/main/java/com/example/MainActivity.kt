@@ -1358,12 +1358,22 @@ fun DashboardScreen(
     val activeOutfit by viewModel.activeOutfit.collectAsState()
     val unlockedSet by viewModel.unlockedRewardsIdsFlow.collectAsState()
 
-    val filteredTasks = tasks.filter { !it.isRecurring }.let { list ->
-        if (filterCategory == null) {
-            list
-        } else {
-            list.filter { it.category == filterCategory }
+    LaunchedEffect(Unit) {
+        viewModel.checkAndResetHabits()
+    }
+
+    var energyFilter by remember { mutableStateOf("All") }
+
+    val filteredTasks = tasks.filter { !it.isRecurring }.filter { task ->
+        val passCategory = filterCategory == null || task.category == filterCategory
+        val energy = getTaskEnergyLevel(task.title)
+        val passEnergy = when (energyFilter) {
+            "Low" -> energy == "Low Brainpower"
+            "Steady" -> energy == "Medium/Steady"
+            "High" -> energy == "High Focus"
+            else -> true
         }
+        passCategory && passEnergy
     }
 
     // Sort tasks so the designated "Eat the Frog" (MIT) task sits at the very top of the list
@@ -1483,9 +1493,6 @@ fun DashboardScreen(
             unlockedSet = unlockedSet
         )
 
-        // --- Real-time "Active Effects HUD" ---
-        ActiveEffectsHUD(activePotionEffects = activePotionEffects)
-
         // --- Today's Frog Dedicated Section ---
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1567,6 +1574,19 @@ fun DashboardScreen(
                 selectedFilter = filterCategory,
                 onSelected = { viewModel.setCategoryFilter(it) }
             )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = "Filter Energy Level",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = CosmosTextSecondary
+            )
+            EnergyFiltersRow(
+                selectedFilter = energyFilter,
+                onSelected = { energyFilter = it }
+            )
         }
 
         Row(
@@ -1641,15 +1661,14 @@ fun DashboardScreen(
         }
 
         // --- Streaks Overview ---
-        val isFreezeActive = activePotionEffects["freeze_potion"]?.let { it > System.currentTimeMillis() } ?: false
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             StreakStatsCard(
-                title = if (isFreezeActive) "Frozen Streaks" else "Active Streaks",
-                value = if (isFreezeActive) "Frozen (Active)" else "$activeStreaks Tasks",
-                emoji = if (isFreezeActive) "❄️" else "⚡",
+                title = "Active Streaks",
+                value = "$activeStreaks Tasks",
+                emoji = "⚡",
                 modifier = Modifier.weight(1f)
             )
             StreakStatsCard(
@@ -2619,6 +2638,61 @@ fun StreakStatsCard(
 }
 
 @Composable
+fun EnergyFiltersRow(
+    selectedFilter: String,
+    onSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        val energyLevels = listOf("All", "Low", "Steady", "High")
+        val labels = listOf("🌌 All", "🟢 Low", "🔵 Steady", "🔴 High")
+
+        energyLevels.forEach { lvl ->
+            val isSelected = selectedFilter == lvl
+            val activeColor = when (lvl) {
+                "Low" -> Color(0xFF064E3B)
+                "Steady" -> Color(0xFF1E3A8A)
+                "High" -> Color(0xFF450A0A)
+                else -> ElectroPurple
+            }
+            val activeTextColor = when (lvl) {
+                "Low" -> Color(0xFF6EE7B7)
+                "Steady" -> Color(0xFF93C5FD)
+                "High" -> Color(0xFFFCA5A5)
+                else -> Color.White
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isSelected) activeColor else CosmosSurface)
+                    .border(
+                        BorderStroke(
+                            1.dp,
+                            if (isSelected) activeColor else CosmosSurfaceLight
+                        ),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .clickable { onSelected(lvl) }
+                    .padding(vertical = 8.dp)
+                    .testTag("energy_filter_${lvl.lowercase()}"),
+                contentAlignment = Alignment.Center
+            ) {
+                val label = labels[energyLevels.indexOf(lvl)]
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) activeTextColor else CosmosTextSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun CategoryFiltersRow(
     selectedFilter: String?,
     onSelected: (String?) -> Unit
@@ -2670,6 +2744,7 @@ data class XpParticle(
     val color: Color
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaskRow(
     task: Task,
@@ -2690,15 +2765,11 @@ fun TaskRow(
         finishedListener = { isClickAnimating = false }
     )
 
-    val isOverclockActive = ((activePotionEffects["overclock"] ?: activePotionEffects["overclock_elixir"])?.let { it > System.currentTimeMillis() } ?: false)
-    val isFreezeActive = activePotionEffects["freeze_potion"]?.let { it > System.currentTimeMillis() } ?: false
-    val isSpartansVowActive = activePotionEffects["spartans_vow"]?.let { it > System.currentTimeMillis() } ?: false
-    val isMidnightOiled = midnightOilTaskIds.contains(task.id)
-    val isGreyedOut = isSpartansVowActive && (
-        task.category.lowercase(Locale.ROOT) == "entertainment" || 
-        task.category.lowercase(Locale.ROOT) == "others" || 
-        task.category.lowercase(Locale.ROOT) == "personal"
-    )
+    val isOverclockActive = false
+    val isFreezeActive = false
+    val isSpartansVowActive = false
+    val isMidnightOiled = false
+    val isGreyedOut = false
 
     val cardBorder = if (isFrog) {
         BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF4ADE80), Color(0xFF22C55E))))
@@ -2740,124 +2811,190 @@ fun TaskRow(
             shape = RoundedCornerShape(8.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp, horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Far Left: The completion circle/checkbox & Middle: Text + Tags + XP in a shared Row
+                // Top row: contains the selection checkbox, title/deadline column, and Frog icon in top-right
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
-                    // Far Left Checkbox
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(if (task.isCompleted) ElectroPurple else Color.Transparent)
-                            .border(
-                                BorderStroke(
-                                    2.dp,
-                                    if (task.isCompleted) ElectroPurple else Color(0xFFFAF6FE).copy(alpha = 0.7f)
-                                ),
-                                CircleShape
-                            )
-                            .clickable(enabled = !isGreyedOut) {
-                                if (!task.isCompleted) {
-                                    isClickAnimating = true
-                                }
-                                onCompletedToggle()
-                            },
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        if (task.isCompleted) {
-                            Icon(
-                                Icons.Default.Check,
-                                contentDescription = "Completed",
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    // Middle-Left: The Task Title & Deadline info
-                    Column(
-                        modifier = Modifier.weight(0.48f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = getTaskDisplayName(task.title),
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    textDecoration = if (task.isCompleted) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
-                                ),
-                                fontWeight = FontWeight.Bold,
-                                color = if (task.isCompleted) CosmosTextSecondary else CosmosTextPrimary,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-
-                            if (isFrog) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(Color(0xFF065F46))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                        .testTag("eat_the_frog_badge")
-                                ) {
-                                    Text(
-                                        text = "🐸 FROG",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF34D399)
-                                    )
-                                }
+                        // Far Left Checkbox
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isGreyedOut) Color(0xFF450A0A)
+                                    else if (task.isCompleted) ElectroPurple
+                                    else Color.Transparent
+                                )
+                                .border(
+                                    BorderStroke(
+                                        2.dp,
+                                        if (isGreyedOut) Color(0xFFEF4444)
+                                        else if (task.isCompleted) ElectroPurple
+                                        else Color(0xFFFAF6FE).copy(alpha = 0.7f)
+                                    ),
+                                    CircleShape
+                                )
+                                .clickable(enabled = !isGreyedOut) {
+                                    if (!task.isCompleted) {
+                                        isClickAnimating = true
+                                    }
+                                    onCompletedToggle()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isGreyedOut) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = "Locked by Spartan's Vow",
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            } else if (task.isCompleted) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Completed",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
                             }
                         }
 
-                        val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
-                        val deadlineText = "🗓️ Due: ${dateFormat.format(Date(task.assignedDateMillis))}"
+                        Spacer(modifier = Modifier.width(10.dp))
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        // Middle-Left: The Task Title & Deadline info
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            if (isMidnightOiled) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
-                                    text = "🛢️ $deadlineText",
-                                    fontSize = 9.sp,
+                                    text = getTaskDisplayName(task.title),
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        textDecoration = if (task.isCompleted) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                                    ),
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFEF4444)
+                                    color = if (task.isCompleted) CosmosTextSecondary else CosmosTextPrimary,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
-                                Text(
-                                    text = "(0 XP)",
-                                    fontSize = 8.sp,
-                                    color = Color(0xFFEF4444),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            } else {
-                                Text(
-                                    text = deadlineText,
-                                    fontSize = 9.sp,
-                                    color = CosmosTextSecondary
-                                )
+
+                                if (isGreyedOut) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(Color(0xFF7F1D1D))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            .testTag("spartans_vow_locked_badge")
+                                    ) {
+                                        Text(
+                                            text = "🛡️ LOCKED BY VOW",
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = Color(0xFFFCA5A5)
+                                        )
+                                    }
+                                }
+
+                                if (isFrog) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(Color(0xFF065F46))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            .testTag("eat_the_frog_badge")
+                                    ) {
+                                        Text(
+                                            text = "🐸 FROG",
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = Color(0xFF34D399)
+                                        )
+                                    }
+                                }
+                            }
+
+                            val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+                            val deadlineText = "🗓️ Due: ${dateFormat.format(Date(task.assignedDateMillis))}"
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (isMidnightOiled) {
+                                    Text(
+                                        text = "🛢️ $deadlineText",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFEF4444)
+                                    )
+                                    Text(
+                                        text = "(0 XP)",
+                                        fontSize = 8.sp,
+                                        color = Color(0xFFEF4444),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else {
+                                    Text(
+                                        text = deadlineText,
+                                        fontSize = 9.sp,
+                                        color = CosmosTextSecondary
+                                    )
+                                }
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Middle-Right: The category, energy tags, and XP reward
-                    Row(
-                        modifier = Modifier.weight(0.52f),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Frog Toggle Button moved to Top-Right
+                    if (onFrogToggle != null) {
+                        IconButton(
+                            onClick = onFrogToggle,
+                            enabled = !isGreyedOut,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(
+                                    if (isFrog) Color(0xFF065F46).copy(alpha = 0.2f) else Color.Transparent,
+                                    shape = CircleShape
+                                )
+                                .testTag("frog_toggle_button_${task.id}")
+                        ) {
+                            Text(
+                                text = "🐸",
+                                fontSize = 14.sp,
+                                modifier = Modifier.graphicsLayer(alpha = if (isFrog && !isGreyedOut) 1f else 0.35f)
+                            )
+                        }
+                    }
+                }
+
+                // Bottom Row using FlowRow for responsive wrapping on smaller screens
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Left: Badge indicators and XP Reward
+                    FlowRow(
+                        modifier = Modifier.align(Alignment.CenterVertically),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         // Category pill
                         Box(
@@ -2884,8 +3021,6 @@ fun TaskRow(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(4.dp))
-
                         // Energy Pill
                         val energy = getTaskEnergyLevel(task.title)
                         val (energyBg, energyColor, energyText) = when (energy) {
@@ -2907,9 +3042,7 @@ fun TaskRow(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // XP Reward with multipliers
+                        // XP Reward
                         val calculatedXp = remember(task) {
                             val categoryFactor = when (task.category.lowercase(Locale.ROOT)) {
                                 "work" -> 1.2f
@@ -2934,7 +3067,7 @@ fun TaskRow(
 
                         if (task.usedMidnightOil) {
                             xpText = "0 XP"
-                            xpColor = Color(0xFF991B1B) // Dark Red for Midnight Oil trade-off reminder
+                            xpColor = Color(0xFF991B1B)
                         } else if (isMidnightOiled) {
                             xpText = "0 XP"
                             xpColor = Color(0xFFEF4444)
@@ -2946,7 +3079,7 @@ fun TaskRow(
                             if (isOverclockActive) {
                                 displayXp = displayXp * 2
                                 xpText = "+${displayXp} XP (2x)"
-                                xpColor = Color(0xFFF59E0B) // Glow Gold
+                                xpColor = Color(0xFFF59E0B)
                             } else if (isSpartansVowActive && task.category.lowercase(Locale.ROOT) == "work") {
                                 displayXp = Math.round(displayXp * 1.5f)
                                 xpText = "+${displayXp} XP (1.5x)"
@@ -2958,80 +3091,58 @@ fun TaskRow(
                             text = xpText,
                             fontWeight = FontWeight.Bold,
                             color = xpColor,
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            softWrap = false
+                            fontSize = 10.sp
                         )
                     }
-                }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Far Right: Action icons clustered together
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    // Option to apply midnight oil
-                    val isMidnightOilPotionActive = activePotionEffects["midnight_oil"]?.let { it > System.currentTimeMillis() } ?: false
-                    
-                    if (!task.isCompleted && !isMidnightOiled && isMidnightOilPotionActive && onApplyMidnightOil != null) {
-                        IconButton(
-                            onClick = onApplyMidnightOil,
-                            modifier = Modifier.size(28.dp),
-                            enabled = !isGreyedOut
-                        ) {
+                    // Right: Actions (Edit, Delete)
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterVertically),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (isGreyedOut) {
                             Text(
-                                text = "🛢️",
-                                fontSize = 14.sp
+                                text = "Locked by Spartan's Vow",
+                                color = Color(0xFFEF4444),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(end = 4.dp)
                             )
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = "Locked by Spartan's Vow",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                         }
-                    }
 
-                    if (onFrogToggle != null) {
                         IconButton(
-                            onClick = onFrogToggle,
+                            onClick = onEdit,
                             enabled = !isGreyedOut,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .background(
-                                    if (isFrog) Color(0xFF065F46).copy(alpha = 0.2f) else Color.Transparent,
-                                    shape = CircleShape
-                                )
-                                .testTag("frog_toggle_button_${task.id}")
+                            modifier = Modifier.size(28.dp)
                         ) {
-                            Text(
-                                text = "🐸",
-                                fontSize = 14.sp,
-                                modifier = Modifier.graphicsLayer(alpha = if (isFrog) 1f else 0.35f)
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit Quest",
+                                tint = if (isGreyedOut) CosmosTextSecondary.copy(alpha = 0.5f) else CosmosTextSecondary,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                    }
 
-                    IconButton(
-                        onClick = onEdit,
-                        enabled = !isGreyedOut,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Edit Quest",
-                            tint = if (isGreyedOut) CosmosTextSecondary.copy(alpha = 0.5f) else CosmosTextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onDelete,
-                        enabled = !isGreyedOut,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete Quest",
-                            tint = if (isGreyedOut) CosmosTextSecondary.copy(alpha = 0.5f) else CosmosTextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        IconButton(
+                            onClick = onDelete,
+                            enabled = !isGreyedOut,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete Quest",
+                                tint = if (isGreyedOut) CosmosTextSecondary.copy(alpha = 0.5f) else CosmosTextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -3474,8 +3585,13 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
                     }
                 } else {
                     dayRecords.forEach { task ->
-                        val isCompletedOnThisDay = completions.any { comp ->
-                            comp.taskId == task.id && isSameDay(comp.completedAt, selectedCalendarDateMillis)
+                        val calendarDateFormattedStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(selectedCalendarDateMillis))
+                        val isCompletedOnThisDay = if (task.isRecurring) {
+                            task.history.contains(calendarDateFormattedStr)
+                        } else {
+                            completions.any { comp ->
+                                comp.taskId == task.id && isSameDay(comp.completedAt, selectedCalendarDateMillis)
+                            }
                         }
 
                         Row(
@@ -3503,7 +3619,7 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
                             IconButton(
                                 onClick = {
                                     coroutineScope.launch {
-                                        viewModel.toggleTaskCompletion(task)
+                                        viewModel.toggleTaskCompletionOnDay(task, selectedCalendarDateMillis)
                                     }
                                 },
                                 modifier = Modifier
@@ -4220,10 +4336,9 @@ fun AddTaskDialog(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
                         .testTag("add_task_title_input"),
                     singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = ElectroPurple,
                         unfocusedBorderColor = CosmosSurfaceLight,
@@ -4629,9 +4744,9 @@ fun EditTaskDialog(
                     onValueChange = { title = it },
                     label = { Text("Title", fontSize = 11.sp) },
                     shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = ElectroPurple,
                         unfocusedBorderColor = CosmosSurfaceLight,
@@ -5003,23 +5118,34 @@ fun HabitsScreen(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 habits.forEach { habit ->
+                    val isCompletedToday = habit.isCompleted
                     Card(
                         colors = CardDefaults.cardColors(containerColor = CosmosSurface),
                         border = BorderStroke(1.dp, CosmosSurfaceLight),
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .clip(RoundedCornerShape(16.dp))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .height(100.dp)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .graphicsLayer(alpha = if (isCompletedToday) 0.6f else 1f)
+                            ) {
                                 Text(
                                     text = getTaskDisplayName(habit.title),
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        textDecoration = if (isCompletedToday) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                                    ),
                                     fontWeight = FontWeight.Bold,
                                     color = CosmosTextPrimary
                                 )
@@ -5088,11 +5214,10 @@ fun HabitsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 // Toggle complete today checkbox button
-                                val isCompletedToday = habit.isCompleted
                                 IconButton(
                                     onClick = { viewModel.toggleTaskCompletion(habit) },
                                     modifier = Modifier
-                                        .size(48.dp)
+                                        .size(40.dp)
                                         .clip(CircleShape)
                                         .background(if (isCompletedToday) ElectroPurple.copy(alpha = 0.2f) else CosmosSurfaceLight)
                                         .border(2.dp, if (isCompletedToday) ElectroPurple else Color.Gray.copy(alpha = 0.5f), CircleShape)
@@ -5100,20 +5225,23 @@ fun HabitsScreen(
                                     Icon(
                                         imageVector = if (isCompletedToday) Icons.Default.Check else Icons.Default.Add,
                                         contentDescription = "Toggle Complete",
-                                        tint = if (isCompletedToday) ElectroPurple else CosmosTextPrimary
+                                        tint = if (isCompletedToday) ElectroPurple else CosmosTextPrimary,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
 
                                 IconButton(
-                                    onClick = { onEditHabit(habit) }
+                                    onClick = { onEditHabit(habit) },
+                                    modifier = Modifier.size(36.dp)
                                 ) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit Habit", tint = CosmosTextSecondary)
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit Habit", tint = CosmosTextSecondary, modifier = Modifier.size(20.dp))
                                 }
 
                                 IconButton(
-                                    onClick = { viewModel.deleteTask(habit) }
+                                    onClick = { viewModel.deleteTask(habit) },
+                                    modifier = Modifier.size(36.dp)
                                 ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete Habit", tint = Color.Red.copy(alpha = 0.8f))
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete Habit", tint = Color.Red.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
                                 }
                             }
                         }
@@ -5561,112 +5689,5 @@ fun MarqueeQuoteBar(
             )
         }
     }
-}
-
-@Composable
-fun ActiveEffectsHUD(
-    activePotionEffects: Map<String, Long>,
-    modifier: Modifier = Modifier
-) {
-    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(activePotionEffects) {
-        while (true) {
-            currentTime = System.currentTimeMillis()
-            kotlinx.coroutines.delay(1000)
-        }
-    }
-
-    val activeList = remember(activePotionEffects, currentTime) {
-        activePotionEffects.filter { it.value > currentTime }.toList()
-    }
-
-    if (activeList.isEmpty()) return
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .testTag("active_effects_hud"),
-        border = BorderStroke(1.dp, ElectroPurple.copy(alpha = 0.5f)),
-        colors = CardDefaults.cardColors(containerColor = CosmosSurface.copy(alpha = 0.9f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "✨ ACTIVE POTION EFFECTS",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp),
-                color = ElectroPurple
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                activeList.forEach { (potionId, expiry) ->
-                    val name = when (potionId) {
-                        "freeze_potion" -> "Freeze Potion"
-                        "overclock_elixir", "overclock" -> "Overclock Elixir"
-                        "midnight_oil" -> "Midnight Oil"
-                        "spartans_vow" -> "Spartan's Vow"
-                        "burnout" -> "Burnout"
-                        else -> potionId.replace("_", " ").replaceFirstChar { it.uppercase() }
-                    }
-                    val emoji = when (potionId) {
-                        "freeze_potion" -> "❄️"
-                        "overclock_elixir", "overclock" -> "⚡"
-                        "midnight_oil" -> "🛢️"
-                        "spartans_vow" -> "🛡️"
-                        "burnout" -> "🥵"
-                        else -> "🧪"
-                     }
-                     val badgeColor = when (potionId) {
-                        "freeze_potion" -> Color(0xFF60A5FA)
-                        "overclock_elixir", "overclock" -> Color(0xFFF59E0B)
-                        "midnight_oil" -> Color(0xFFEF4444)
-                        "spartans_vow" -> Color(0xFFEC4899)
-                        "burnout" -> Color(0xFF9CA3AF)
-                        else -> ElectroPurple
-                     }
-
-                     val remaining = maxOf(0L, expiry - currentTime)
-                     val countdown = formatRemainingTime(remaining)
-
-                     Box(
-                         modifier = Modifier
-                             .clip(RoundedCornerShape(20.dp))
-                             .background(badgeColor.copy(alpha = 0.15f))
-                             .border(BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f)), RoundedCornerShape(20.dp))
-                             .padding(horizontal = 10.dp, vertical = 6.dp)
-                     ) {
-                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                             Text(text = emoji, fontSize = 12.sp)
-                             Text(
-                                 text = "$name - $countdown",
-                                 fontSize = 11.sp,
-                                 fontWeight = FontWeight.Bold,
-                                 color = CosmosTextPrimary
-                             )
-                         }
-                     }
-                }
-            }
-        }
-    }
-}
-
-fun formatRemainingTime(millis: Long): String {
-    if (millis <= 0) return "00:00:00"
-    val seconds = millis / 1000
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
-    return String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, secs)
 }
 

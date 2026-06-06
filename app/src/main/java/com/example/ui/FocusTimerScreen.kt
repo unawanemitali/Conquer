@@ -54,9 +54,7 @@ fun FocusTimerScreen(
     val timerState by viewModel.timerState.collectAsState()
     val focusSessionLogs by viewModel.focusSessionsFlow.collectAsState(initial = emptyList())
     val activePotionEffects by viewModel.activePotionEffects.collectAsState()
-    val isSpartansVowActive = remember(activePotionEffects) {
-        activePotionEffects["spartans_vow"]?.let { it > System.currentTimeMillis() } ?: false
-    }
+    val isSpartansVowActive = false
 
     var customMinutes by remember { mutableStateOf(25) }
     var showTaskSelector by remember { mutableStateOf(false) }
@@ -283,36 +281,24 @@ fun FocusTimerScreen(
         ) {
             when (timerState) {
                 TaskViewModel.TimerState.IDLE -> {
-                    val activeCat = activeTask?.category?.lowercase(Locale.ROOT) ?: "others"
-                    val startDisabled = isSpartansVowActive && (
-                        activeCat == "entertainment" || 
-                        activeCat == "others" || 
-                        activeCat == "personal" ||
-                        activeCat == "other"
-                    )
                     Button(
                         onClick = {
-                            if (startDisabled) {
-                                viewModel.triggerSpartansVowToast()
-                            } else {
-                                viewModel.startTimer(customMinutes)
-                            }
+                            viewModel.startTimer(customMinutes)
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (startDisabled) CosmosSurfaceLight else ElectroPurple,
-                            contentColor = if (startDisabled) CosmosTextSecondary.copy(alpha = 0.5f) else Color.White
+                            containerColor = ElectroPurple,
+                            contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth(0.8f)
                             .height(48.dp)
                             .testTag("start_timer_button")
-                            .graphicsLayer(alpha = if (startDisabled) 0.5f else 1f)
                     ) {
                         Icon(
                             Icons.Default.PlayArrow,
                             contentDescription = "Start Program",
-                            tint = if (startDisabled) CosmosTextSecondary.copy(alpha = 0.5f) else Color.White
+                            tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("START TIMER", fontWeight = FontWeight.Bold)
@@ -504,27 +490,21 @@ fun FocusTimerScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             item {
-                                val isFreeSessionDisabled = isSpartansVowActive
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            if (isFreeSessionDisabled) {
-                                                android.widget.Toast.makeText(
-                                                    viewModel.getApplication(),
-                                                    "Spartan's Vow is active. You can only work on Work tasks right now.",
-                                                    android.widget.Toast.LENGTH_LONG
-                                                ).show()
-                                            } else {
-                                                viewModel.selectTaskForFocus(null)
-                                                showTaskSelector = false
-                                            }
-                                        }
-                                        .graphicsLayer(alpha = if (isFreeSessionDisabled) 0.5f else 1f),
+                                            viewModel.selectTaskForFocus(null)
+                                            showTaskSelector = false
+                                        },
                                     colors = CardDefaults.cardColors(containerColor = CosmosSurface),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Box(modifier = Modifier.padding(12.dp), contentAlignment = Alignment.CenterStart) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
                                         Text(
                                             "Free Focus Session (No associated task)",
                                             fontSize = 12.sp,
@@ -537,27 +517,13 @@ fun FocusTimerScreen(
 
                             items(tasks) { task ->
                                 val isSelected = activeTask?.id == task.id
-                                val isVowDisabled = isSpartansVowActive && (
-                                    task.category.lowercase(Locale.ROOT) == "entertainment" || 
-                                    task.category.lowercase(Locale.ROOT) == "others" || 
-                                    task.category.lowercase(Locale.ROOT) == "personal"
-                                )
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            if (isVowDisabled) {
-                                                android.widget.Toast.makeText(
-                                                    viewModel.getApplication(),
-                                                    "Spartan's Vow is active. You can only work on Work tasks right now.",
-                                                    android.widget.Toast.LENGTH_LONG
-                                                ).show()
-                                            } else {
-                                                viewModel.selectTaskForFocus(task)
-                                                showTaskSelector = false
-                                            }
+                                            viewModel.selectTaskForFocus(task)
+                                            showTaskSelector = false
                                         }
-                                        .graphicsLayer(alpha = if (isVowDisabled) 0.5f else 1f)
                                         .border(
                                             BorderStroke(
                                                 1.5.dp,
@@ -578,8 +544,18 @@ fun FocusTimerScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(getTaskDisplayName(task.title), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CosmosTextPrimary)
-                                            Text(task.category, fontSize = 10.sp, color = ElectroPurple, fontWeight = FontWeight.Bold)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(getTaskDisplayName(task.title), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CosmosTextPrimary)
+                                            }
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(task.category, fontSize = 10.sp, color = ElectroPurple, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                         Text("+${task.xp} XP", fontWeight = FontWeight.Black, fontSize = 11.sp, color = ElectroPurple)
                                     }

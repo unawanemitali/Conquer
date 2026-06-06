@@ -18,7 +18,9 @@ data class Task(
     val assignedDateMillis: Long = System.currentTimeMillis(), // New future assignment date
     val frequencyDaysOfWeek: Int = 7, // Habit frequency (1-7 days a week)
     val priorityQuadrant: String = "Not Urgent & Unimportant",
-    val usedMidnightOil: Boolean = false
+    val usedMidnightOil: Boolean = false,
+    val lastCompletedDate: String = "",
+    val history: List<String> = emptyList()
 )
 
 @Entity(tableName = "daily_notes")

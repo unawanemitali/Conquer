@@ -13,6 +13,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.*
 
+const val LevelingConstant = 15.0
+
+fun calculateLevel(xp: Int): Int {
+    return (Math.floor(LevelingConstant * Math.log(xp.toDouble() + 1.0)) + 1.0).toInt()
+}
+
+fun getXpForLevel(level: Int): Int {
+    if (level <= 1) return 0
+    return Math.ceil(Math.exp((level - 1.0) / LevelingConstant) - 1.0).toInt().coerceAtLeast(0)
+}
+
+fun getXpForNextLevel(currentLevel: Int): Int {
+    return getXpForLevel(currentLevel + 1)
+}
+
 class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
@@ -84,16 +99,21 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     // Gamification level profiles
     val userLevelState: StateFlow<UserLevelInfo> = totalXpFlow.map { xp ->
         val safeXp = xp ?: 0
-        val xpPerLevel = 200
-        val level = (safeXp / xpPerLevel) + 1
-        val progressXp = safeXp % xpPerLevel
-        val fraction = progressXp.toFloat() / xpPerLevel.toFloat()
+        val level = calculateLevel(safeXp)
+        val currentLevelBaseXP = getXpForLevel(level)
+        val nextLevelXP = getXpForNextLevel(level)
+        val range = nextLevelXP - currentLevelBaseXP
+        val fraction = if (range > 0) {
+            (safeXp.toFloat() - currentLevelBaseXP.toFloat()) / range.toFloat()
+        } else {
+            0f
+        }
         
         UserLevelInfo(
             level = level,
             currentXp = safeXp,
-            nextLevelXp = level * xpPerLevel,
-            levelProgressPercent = fraction
+            nextLevelXp = nextLevelXP,
+            levelProgressPercent = fraction.coerceIn(0f, 1f)
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserLevelInfo())
 
@@ -321,18 +341,10 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         val hexColor: String
     )
 
-    val apothecaryStorePotions = listOf(
-        Potion("freeze_potion", "Freeze Potion", "Grace Day: Pauses streaks/XP decay for 24 hours", 50, "❄️", "#60A5FA"),
-        Potion("overclock", "Overclock Elixir", "High risk/reward XP multiplier", 80, "⚡", "#F59E0B"),
-        Potion("midnight_oil", "Midnight Oil", "Deadline extender with XP penalty", 50, "🛢️", "#10B981"),
-        Potion("spartans_vow", "Spartan's Vow", "Focus lock on work tasks", 60, "🛡️", "#EF4444"),
-        Potion("phoenix_tear", "Phoenix Tear", "Streak resurrection", 100, "🔥", "#EC4899"),
-        Potion("amnesia_draft", "Amnesia Draft", "Guilt-free delete with reflection", 50, "🧪", "#8B5CF6")
-    )
+    val apothecaryStorePotions = listOf<Potion>()
 
     fun getPotionPrice(potionId: String, basePrice: Int): Int {
-        val count = sharedPrefs.getInt("potion_inflation_count_$potionId", 0)
-        return (basePrice * Math.pow(2.5, count.toDouble())).toInt()
+        return 0
     }
 
     private val _potionCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -343,95 +355,18 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     val activeTheme: StateFlow<String> = _equippedThemeId.asStateFlow()
     val activeOutfit: StateFlow<String> = _equippedSkinId.asStateFlow()
-    val activePotions: StateFlow<List<ActivePotionInfo>> = _activePotionEffects.map { map ->
-        map.filter { it.value > System.currentTimeMillis() }.map { (key, value) ->
-            if (key == "overclock" || key == "overclock_elixir") {
-                ActivePotionInfo(
-                    id = "overclock",
-                    name = "Overclock Elixir",
-                    type = "multiplier",
-                    value = 2,
-                    expiresAt = value
-                )
-            } else {
-                ActivePotionInfo(
-                    id = key,
-                    name = when (key) {
-                        "freeze_potion" -> "Freeze Potion"
-                        "midnight_oil" -> "Midnight Oil"
-                        "spartans_vow" -> "Spartan's Vow"
-                        else -> key.replace("_", " ").replaceFirstChar { it.uppercase() }
-                    },
-                    type = when (key) {
-                        "freeze_potion" -> "freeze"
-                        "midnight_oil" -> "extender"
-                        "spartans_vow" -> "vow"
-                        else -> "utility"
-                    },
-                    value = 1,
-                    expiresAt = value
-                )
-            }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val activePotions: StateFlow<List<ActivePotionInfo>> = MutableStateFlow<List<ActivePotionInfo>>(emptyList()).asStateFlow()
 
-    private val _midnightOilTaskIds = MutableStateFlow<Set<Int>>(
-        sharedPrefs.getStringSet("midnight_oil_task_ids", emptySet())?.mapNotNull { it.toIntOrNull() }?.toSet() ?: emptySet()
-    )
+    private val _midnightOilTaskIds = MutableStateFlow<Set<Int>>(emptySet())
     val midnightOilTaskIds: StateFlow<Set<Int>> = _midnightOilTaskIds.asStateFlow()
 
     fun applyMidnightOilToTask(taskId: Int): Boolean {
-        var success = false
-        val activeUntil = sharedPrefs.getLong("midnight_oil_active_until", 0L)
-        val isEffectActive = activeUntil > System.currentTimeMillis()
-        val count = sharedPrefs.getInt("potion_midnight_oil_count", 0)
-
-        if (isEffectActive || count > 0) {
-            viewModelScope.launch {
-                val task = repository.getTaskById(taskId)
-                if (task != null && !task.isCompleted) {
-                    if (!isEffectActive && count > 0) {
-                        // Consume 1 Midnight Oil potion
-                        sharedPrefs.edit().putInt("potion_midnight_oil_count", count - 1).apply()
-                    }
-                    // Extend deadline by adding 24 hours (86400000 ms), representing tomorrow
-                    val tomorrow = System.currentTimeMillis() + 86400000L
-                    repository.updateTask(task.copy(assignedDateMillis = tomorrow, usedMidnightOil = true))
-
-                    val newSet = _midnightOilTaskIds.value + taskId
-                    sharedPrefs.edit().putStringSet("midnight_oil_task_ids", newSet.map { it.toString() }.toSet()).apply()
-                    _midnightOilTaskIds.value = newSet
-                    loadPotionData()
-                }
-            }
-            success = true
-        }
-        return success
+        return false
     }
 
     fun loadPotionData() {
-        val counts = mapOf(
-            "freeze_potion" to sharedPrefs.getInt("potion_freeze_potion_count", 0),
-            "overclock" to (sharedPrefs.getInt("potion_overclock_count", 0) + sharedPrefs.getInt("potion_overclock_elixir_count", 0)),
-            "midnight_oil" to sharedPrefs.getInt("potion_midnight_oil_count", 0),
-            "spartans_vow" to sharedPrefs.getInt("potion_spartans_vow_count", 0),
-            "phoenix_tear" to sharedPrefs.getInt("potion_phoenix_tear_count", 0),
-            "amnesia_draft" to sharedPrefs.getInt("potion_amnesia_draft_count", 0)
-        )
-        _potionCounts.value = counts
-
-        val overclockActiveUntil = maxOf(
-            sharedPrefs.getLong("overclock_active_until", 0L),
-            sharedPrefs.getLong("overclock_elixir_active_until", 0L)
-        )
-        val effects = mapOf(
-            "freeze_potion" to sharedPrefs.getLong("freeze_potion_active_until", 0L),
-            "overclock" to overclockActiveUntil,
-            "midnight_oil" to sharedPrefs.getLong("midnight_oil_active_until", 0L),
-            "spartans_vow" to sharedPrefs.getLong("spartans_vow_active_until", 0L),
-            "burnout" to sharedPrefs.getLong("burnout_active_until", 0L)
-        )
-        _activePotionEffects.value = effects
+        _potionCounts.value = emptyMap()
+        _activePotionEffects.value = emptyMap()
     }
 
     private fun isBeforeYesterday(lastCompletedMs: Long): Boolean {
@@ -457,7 +392,6 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             if (tasks.isEmpty()) return@launch
 
             val now = System.currentTimeMillis()
-            val isFreezePotionActive = (_activePotionEffects.value["freeze_potion"] ?: 0L) > now
             val lastCheckedDay = sharedPrefs.getLong("last_streak_check_millis", 0L)
             
             val todayZero = Calendar.getInstance().apply {
@@ -472,209 +406,43 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             
             if (isNewDay) {
                 sharedPrefs.edit().putLong("last_streak_check_millis", now).apply()
-                
-                if (isFreezePotionActive) {
-                    sharedPrefs.edit().putBoolean("is_day_frozen", true).apply()
-                    _isDayFrozen.value = true
-                    viewModelScope.launch(Dispatchers.Main) {
-                        android.widget.Toast.makeText(
-                            getApplication(),
-                            "❄️ Day Frozen: Streaks maintained by Freeze Potion!",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    return@launch
-                } else {
-                    sharedPrefs.edit().putBoolean("is_day_frozen", false).apply()
-                    _isDayFrozen.value = false
-                }
+                sharedPrefs.edit().putBoolean("is_day_frozen", false).apply()
+                _isDayFrozen.value = false
 
                 val brokenTasks = tasks.filter { it.isRecurring && it.streak > 0 && isBeforeYesterday(it.lastCompletedAt) }
                 
                 if (brokenTasks.isNotEmpty()) {
-                    val phoenixTearsCount = sharedPrefs.getInt("potion_phoenix_tear_count", 0)
-                    if (phoenixTearsCount > 0) {
-                        sharedPrefs.edit().putInt("potion_phoenix_tear_count", phoenixTearsCount - 1).apply()
-                        
-                        val completion = com.example.data.TaskCompletion(
-                            taskId = -5000,
-                            taskTitle = "🔥 Phoenix Tear Consumed: Streak Resurrected",
-                            taskCategory = "Apothecary",
-                            completedAt = now,
-                            xpEarned = 0
-                        )
-                        taskDao.insertCompletion(completion)
-                        
-                        viewModelScope.launch(Dispatchers.Main) {
-                            android.widget.Toast.makeText(
-                                getApplication(),
-                                "You failed to finish your tasks, but a Phoenix Tear resurrected your streak!",
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
-                        loadPotionData()
-                    } else {
-                        brokenTasks.forEach { task ->
-                            taskDao.updateTaskCompletionState(task.id, task.isCompleted, 0, task.lastCompletedAt)
-                        }
+                    brokenTasks.forEach { task ->
+                        taskDao.updateTaskCompletionState(task.id, task.isCompleted, 0, task.lastCompletedAt, task.lastCompletedDate, task.history)
                     }
+                }
+            }
+        }
+    }
+
+    fun checkAndResetHabits() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val format = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            val todayStr = format.format(java.util.Date())
+            val tasks = repository.allTasksFlow.firstOrNull() ?: emptyList()
+            tasks.forEach { task ->
+                if (task.isRecurring && task.isCompleted && task.lastCompletedDate < todayStr) {
+                    val updatedTask = task.copy(isCompleted = false)
+                    repository.updateTask(updatedTask)
                 }
             }
         }
     }
 
     fun executeAmnesiaDraft(deductXp: Boolean = true) {
-        viewModelScope.launch {
-            // 2. The Buff (The Purge):
-            // - Scan the activePotions global state and instantly remove the "Burnout" debuff if it exists.
-            sharedPrefs.edit().remove("burnout_active_until").apply()
-
-            // - Map through the global tasks state. Find any task where usedMidnightOil === true and revert it to usedMidnightOil: false.
-            val allTasks = repository.allTasksFlow.firstOrNull() ?: emptyList()
-            allTasks.forEach { task ->
-                if (task.usedMidnightOil) {
-                    repository.updateTask(task.copy(usedMidnightOil = false))
-                }
-            }
-
-            // 3. The Trade-off (Mind Blank):
-            // - Instantly clear ALL other active buffs from the activePotions array (remove Overclock Elixir, Spartan's Vow, Freeze Potion, etc.).
-            sharedPrefs.edit()
-                .remove("overclock_active_until")
-                .remove("overclock_elixir_active_until")
-                .remove("freeze_potion_active_until")
-                .remove("midnight_oil_active_until")
-                .remove("spartans_vow_active_until")
-                .apply()
-
-            // - Deduct exactly 50 XP from the user's total XP balance as the cost of the mind-wipe.
-            if (deductXp) {
-                val completion = TaskCompletion(
-                    taskId = -9999,
-                    taskTitle = "Amnesia Draft Mind-wipe Cost",
-                    taskCategory = "Apothecary",
-                    completedAt = System.currentTimeMillis(),
-                    xpEarned = -50
-                )
-                taskDao.insertCompletion(completion)
-            }
-
-            // 4. UI Feedback: Trigger a stark visual toast notification: "Amnesia Draft consumed. All buffs and debuffs have been wiped from your memory. (-50 XP)"
-            viewModelScope.launch(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    getApplication(),
-                    "Amnesia Draft consumed. All buffs and debuffs have been wiped from your memory. (-50 XP)",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            }
-
-            loadPotionData()
-        }
+        // No-op as potions are removed
     }
 
     fun buyPotion(potion: Potion): Boolean {
-        val currentPrice = getPotionPrice(potion.id, potion.priceXp)
-        val currentXp = userLevelState.value.currentXp
-        if (currentXp >= currentPrice) {
-            viewModelScope.launch {
-                if (potion.id == "amnesia_draft") {
-                    // Instant Execution: Unlike timed potions, the "Amnesia Draft" does not get added to the activePotions array with a countdown. It executes its logic the exact moment the user clicks "Buy/Use" and then disappears.
-                    executeAmnesiaDraft(deductXp = true)
-
-                    // Increment inflation tracker upon buying
-                    val currentInflation = sharedPrefs.getInt("potion_inflation_count_${potion.id}", 0)
-                    sharedPrefs.edit().putInt("potion_inflation_count_${potion.id}", currentInflation + 1).apply()
-
-                    loadPotionData()
-                    return@launch
-                }
-
-                val completion = TaskCompletion(
-                    taskId = -1000 - potion.id.hashCode().coerceAtLeast(0),
-                    taskTitle = "Bought Potion: ${potion.name}",
-                    taskCategory = "Apothecary",
-                    completedAt = System.currentTimeMillis(),
-                    xpEarned = -currentPrice
-                )
-                taskDao.insertCompletion(completion)
-
-                val key = "potion_${potion.id}_count"
-                val currentCount = sharedPrefs.getInt(key, 0)
-                sharedPrefs.edit().putInt(key, currentCount + 1).apply()
-
-                // Special requirement: When buying "overclock_elixir" or "overclock", immediately activate it and push into activePotions!
-                if (potion.id == "overclock" || potion.id == "overclock_elixir") {
-                    val duration = 86400000L // 24 hours
-                    val activeUntilKey = "overclock_active_until"
-                    val currentActiveUntil = sharedPrefs.getLong(activeUntilKey, 0L)
-                    val baseTime = maxOf(System.currentTimeMillis(), currentActiveUntil)
-                    sharedPrefs.edit().putLong(activeUntilKey, baseTime + duration).apply()
-                }
-
-                // Increment inflation tracker upon buying
-                val currentInflation = sharedPrefs.getInt("potion_inflation_count_${potion.id}", 0)
-                sharedPrefs.edit().putInt("potion_inflation_count_${potion.id}", currentInflation + 1).apply()
-
-                loadPotionData()
-            }
-            return true
-        }
         return false
     }
 
     fun consumePotion(potion: Potion): Boolean {
-        val realId = if (potion.id == "overclock_elixir") "overclock" else potion.id
-        val key = "potion_${realId}_count"
-        val fallbackKey = "potion_overclock_elixir_count"
-        
-        var currentCount = sharedPrefs.getInt(key, 0)
-        if (currentCount == 0 && realId == "overclock") {
-            currentCount = sharedPrefs.getInt(fallbackKey, 0)
-        }
-        
-        if (currentCount > 0) {
-            if (sharedPrefs.getInt(key, 0) > 0) {
-                sharedPrefs.edit().putInt(key, currentCount - 1).apply()
-            } else {
-                sharedPrefs.edit().putInt(fallbackKey, currentCount - 1).apply()
-            }
-            
-            if (realId == "amnesia_draft") {
-                executeAmnesiaDraft(deductXp = true)
-                return true
-            }
-            
-            val duration = 86400000L // 24 hours
-            val activeUntilKey = when(realId) {
-                "freeze_potion" -> "freeze_potion_active_until"
-                "overclock" -> "overclock_active_until"
-                "midnight_oil" -> "midnight_oil_active_until"
-                "spartans_vow" -> "spartans_vow_active_until"
-                else -> null
-            }
-            if (activeUntilKey != null) {
-                val currentActiveUntil = sharedPrefs.getLong(activeUntilKey, 0L)
-                val baseTime = maxOf(System.currentTimeMillis(), currentActiveUntil)
-                sharedPrefs.edit().putLong(activeUntilKey, baseTime + duration).apply()
-            }
-
-            // Increment inflation tracker upon using
-            val currentInflation = sharedPrefs.getInt("potion_inflation_count_${potion.id}", 0)
-            sharedPrefs.edit().putInt("potion_inflation_count_${potion.id}", currentInflation + 1).apply()
-
-            viewModelScope.launch {
-                val completion = TaskCompletion(
-                    taskId = -2000 - potion.id.hashCode().coerceAtLeast(0),
-                    taskTitle = "Consumed Potion: ${potion.name}",
-                    taskCategory = "Apothecary",
-                    completedAt = System.currentTimeMillis(),
-                    xpEarned = 0
-                )
-                taskDao.insertCompletion(completion)
-                loadPotionData()
-            }
-            return true
-        }
         return false
     }
 
@@ -853,6 +621,65 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleTaskCompletionOnDay(task: Task, dateMillis: Long) {
+        viewModelScope.launch {
+            val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(dateMillis))
+            val isCompletedOnDay = if (task.isRecurring) {
+                task.history.contains(dateStr)
+            } else {
+                val todayStartCal = Calendar.getInstance().apply {
+                    timeInMillis = dateMillis
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val startOfDay = todayStartCal.timeInMillis
+                val endOfDay = startOfDay + 86400000L - 1000L
+                taskDao.getCompletionsInRange(startOfDay, endOfDay).any { it.taskId == task.id }
+            }
+
+            if (isCompletedOnDay) {
+                repository.undoCompleteTask(task, dateMillis)
+                val c1 = Calendar.getInstance().apply { timeInMillis = dateMillis }
+                val c2 = Calendar.getInstance()
+                val isToday = c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) && c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+                if (isToday) {
+                    val updatedTask = taskDao.getTaskById(task.id) ?: task
+                    repository.updateTask(updatedTask.copy(isCompleted = false))
+                }
+            } else {
+                val currentXp = totalXpFlow.first() ?: 0
+                val xpPerLevel = 200
+                val oldLevel = (currentXp / xpPerLevel) + 1
+
+                val xpEarned = repository.completeTask(
+                    task = task,
+                    timestamp = dateMillis,
+                    activePotions = _activePotionEffects.value,
+                    midnightOilTaskIds = _midnightOilTaskIds.value
+                )
+
+                val c1 = Calendar.getInstance().apply { timeInMillis = dateMillis }
+                val c2 = Calendar.getInstance()
+                val isToday = c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) && c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+                if (isToday) {
+                    val updatedTask = taskDao.getTaskById(task.id) ?: task
+                    repository.updateTask(updatedTask.copy(isCompleted = true))
+                }
+
+                val currentXP = currentXp
+                val rewardedXP = xpEarned
+                val targetXP = oldLevel * xpPerLevel
+
+                if (currentXP + rewardedXP >= targetXP) {
+                    val newLevel = ((currentXP + rewardedXP) / xpPerLevel) + 1
+                    _levelUpEvent.emit(LevelUpEvent(oldLevel = oldLevel, newLevel = newLevel, xpEarned = xpEarned))
+                }
+            }
+        }
+    }
+
     // --- Focus Timer Engine ---
     enum class TimerState { IDLE, RUNNING, PAUSED }
 
@@ -876,24 +703,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         _activeFocusTask.value = task
     }
 
-    fun triggerSpartansVowToast() {
-        viewModelScope.launch(Dispatchers.Main) {
-            android.widget.Toast.makeText(
-                getApplication(),
-                "Spartan's Vow is active. You can only work on Work tasks right now.",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
     fun startTimer(customMinutes: Int = 25) {
-        val isSpartansVowActive = (_activePotionEffects.value["spartans_vow"] ?: 0L) > System.currentTimeMillis()
-        val cat = _activeFocusTask.value?.category?.lowercase(Locale.ROOT) ?: "others"
-        if (isSpartansVowActive && (cat == "personal" || cat == "entertainment" || cat == "others" || cat == "other")) {
-            triggerSpartansVowToast()
-            return
-        }
-
         timerJob?.cancel()
         val totalSecs = customMinutes * 60
         _timerDurationTotal.value = totalSecs
@@ -924,20 +734,6 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopTimer(interrupted: Boolean = true) {
-        if (interrupted && _timerState.value != TimerState.IDLE) {
-            val isOverclockActive = (_activePotionEffects.value["overclock"] ?: 0L) > System.currentTimeMillis()
-            if (isOverclockActive) {
-                sharedPrefs.edit().putLong("burnout_active_until", System.currentTimeMillis() + 86400000L).apply()
-                loadPotionData()
-                viewModelScope.launch(Dispatchers.Main) {
-                    android.widget.Toast.makeText(
-                        getApplication(),
-                        "🥵 Early Exit! Burnout debuff applied: XP gains halved for 24 hours!",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
 
         timerJob?.cancel()
         val totalSecs = _timerDurationTotal.value

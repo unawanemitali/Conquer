@@ -55,14 +55,11 @@ class TaskRepository(
             val currentCalendar = Calendar.getInstance().apply { timeInMillis = timestamp }
             
             val isNextDay = isConsecutiveDay(lastCompCalendar, currentCalendar)
-            val isFreezePotionActive = activePotions["freeze_potion"]?.let { it > timestamp } ?: false
             
             if (isNextDay) {
                 task.streak + 1
             } else if (task.lastCompletedAt == 0L) {
                 1
-            } else if (isFreezePotionActive) {
-                task.streak + 1 // STREAK PRESERVED from resetting under freeze potion
             } else {
                 1
             }
@@ -71,7 +68,14 @@ class TaskRepository(
         }
 
         // Update task state in database
-        taskDao.updateTaskCompletionState(task.id, true, updatedStreak, timestamp)
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val todayStr = sdf.format(Date(timestamp))
+        val updatedHistory = if (task.history.contains(todayStr)) {
+            task.history
+        } else {
+            task.history + todayStr
+        }
+        taskDao.updateTaskCompletionState(task.id, true, updatedStreak, timestamp, todayStr, updatedHistory)
 
         // Math-based Dynamic XP System Calculations
         val categoryFactor = when (task.category.lowercase(Locale.ROOT)) {
@@ -89,41 +93,9 @@ class TaskRepository(
         }
         val streakBonus = 1.0f + (if (task.isRecurring) minOf(updatedStreak, 10) * 0.05f else 0.0f)
         
-        val isOverclockActive = (activePotions["overclock"]?.let { it > timestamp } ?: false) ||
-                                (activePotions["overclock_elixir"]?.let { it > timestamp } ?: false)
-        val isBurnoutActive = (activePotions["burnout"]?.let { it > timestamp } ?: false)
-        
         val baseXP = task.xp
-        var finalXP = baseXP.toDouble()
-        if (task.usedMidnightOil == true) {
-            finalXP = 0.0
-        } else {
-            if (isOverclockActive) {
-                finalXP = baseXP * 2.0
-            }
-            if (isBurnoutActive) {
-                finalXP = baseXP * 0.5
-            }
-        }
-        
-        var xpEarned = Math.round(finalXP * difficultyFactor * categoryFactor * streakBonus).toInt()
-
-        // Apply Midnight Oil penalty (0 XP upon completion)
-        if (midnightOilTaskIds.contains(task.id)) {
-            xpEarned = 0
-        } else {
-            // Apply Freeze Potion penalty (halved XP)
-            val isFreezeActive = activePotions["freeze_potion"]?.let { it > timestamp } ?: false
-            if (isFreezeActive) {
-                xpEarned = Math.round(xpEarned / 2f)
-            }
-
-            // Apply Spartan's Vow buff (1.5x on Work tasks)
-            val isSpartansVowActive = activePotions["spartans_vow"]?.let { it > timestamp } ?: false
-            if (isSpartansVowActive && task.category.lowercase(Locale.ROOT) == "work") {
-                xpEarned = Math.round(xpEarned * 1.5f)
-            }
-        }
+        val finalXP = baseXP.toDouble()
+        val xpEarned = Math.round(finalXP * difficultyFactor * categoryFactor * streakBonus).toInt()
 
         // Log completion in time-series database
         val completion = TaskCompletion(
@@ -144,8 +116,11 @@ class TaskRepository(
         val calendar = Calendar.getInstance().apply { timeInMillis = timestamp }
         val (startOfDay, endOfDay) = getDayRange(calendar)
         
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val todayStr = sdf.format(Date(timestamp))
+        val updatedHistory = task.history.filter { it != todayStr }
         taskDao.deleteCompletionForDay(task.id, startOfDay, endOfDay)
-        taskDao.updateTaskCompletionState(task.id, false, if (task.streak > 0) task.streak - 1 else 0, 0L)
+        taskDao.updateTaskCompletionState(task.id, false, if (task.streak > 0) task.streak - 1 else 0, 0L, "", updatedHistory)
     }
 
     // --- Optimized Time-Series Temporal Range Queries ---
