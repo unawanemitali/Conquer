@@ -39,6 +39,11 @@ class TaskRepository(
     suspend fun getDailyNoteByDate(dateStr: String): DailyNote? = taskDao.getDailyNoteByDate(dateStr)
     suspend fun insertDailyNote(note: DailyNote) = taskDao.insertDailyNote(note)
 
+    // --- Activities Catalog ---
+    val allCatalogItemsFlow: Flow<List<CatalogItem>> = taskDao.getAllCatalogItemsFlow()
+    suspend fun insertCatalogItem(item: CatalogItem): Long = taskDao.insertCatalogItem(item)
+    suspend fun deleteCatalogItem(item: CatalogItem) = taskDao.deleteCatalogItem(item)
+
     private fun getLogicalTodayString(timestamp: Long = System.currentTimeMillis()): String {
         val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
         val hour = cal.get(Calendar.HOUR_OF_DAY)

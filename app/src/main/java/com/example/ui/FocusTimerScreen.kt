@@ -39,6 +39,7 @@ import com.example.CosmosTextSecondary
 import com.example.getTaskDisplayName
 import com.example.data.FocusSession
 import com.example.data.Task
+import com.example.data.TaskCompletion
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -53,12 +54,17 @@ fun FocusTimerScreen(
     val totalSeconds by viewModel.timerDurationTotal.collectAsState()
     val timerState by viewModel.timerState.collectAsState()
     val focusSessionLogs by viewModel.focusSessionsFlow.collectAsState(initial = emptyList())
+    val completions by viewModel.completionsFlow.collectAsState(initial = emptyList())
+    val analyticsData = remember(completions, focusSessionLogs) {
+        processAnalyticsData(completions, focusSessionLogs)
+    }
     val activePotionEffects by viewModel.activePotionEffects.collectAsState()
     val isSpartansVowActive = false
 
     var customMinutes by remember { mutableStateOf(25) }
     var showTaskSelector by remember { mutableStateOf(false) }
     var showExitConfirmDialog by remember { mutableStateOf(false) }
+    var selectedHeatmapDay by remember { mutableStateOf<ProcessedDay?>(null) }
 
     val progress = if (totalSeconds > 0) remainingSeconds.toFloat() / totalSeconds.toFloat() else 1f
     val minutesLeft = remainingSeconds / 60
@@ -357,6 +363,165 @@ fun FocusTimerScreen(
                         Icon(Icons.Default.Close, contentDescription = "Stop", tint = Color(0xFFBC1F1F))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("CANCEL", color = Color(0xFFBC1F1F), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // ================= DAILY STUDY CALENDAR =================
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            colors = CardDefaults.cardColors(containerColor = CosmosSurface),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, CosmosSurfaceLight)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Top
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "DAILY STUDY CALENDAR",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            color = CosmosTextPrimary
+                        )
+                        Text(
+                            text = "How much you focused every day over the last 5 weeks",
+                            fontSize = 10.sp,
+                            color = CosmosTextSecondary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFC2EFD4), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "MY TIMER TIME",
+                            fontSize = 8.sp,
+                            color = Color(0xFF146C2E),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Heatmap Grid Drawing
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Days Left labels
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                            horizontalAlignment = Alignment.End,
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            listOf("Mon", "Wed", "Fri", "Sun").forEach { day ->
+                                Text(day, fontSize = 9.sp, color = CosmosTextSecondary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // 5 columns of 7 weeks
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            for (weekIdx in 0 until 5) {
+                                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    for (dayIdx in 0 until 7) {
+                                        val itemIdx = weekIdx * 7 + dayIdx
+                                        val dayData = analyticsData.heatmapDays.getOrNull(itemIdx) ?: ProcessedDay(0L, 0)
+                                        val durationMinutes = dayData.totalSecondsFocus / 60
+                                        
+                                        val cellColor = when {
+                                            durationMinutes == 0 -> CosmosBackground
+                                            durationMinutes < 15 -> ElectroPink.copy(alpha = 0.4f)
+                                            durationMinutes < 35 -> ElectroPurple.copy(alpha = 0.5f)
+                                            else -> ElectroPurple
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(cellColor)
+                                                .border(
+                                                    BorderStroke(
+                                                        if (selectedHeatmapDay?.timestamp == dayData.timestamp) 2.dp else 0.5.dp,
+                                                        if (selectedHeatmapDay?.timestamp == dayData.timestamp) NeonCyan else CosmosSurfaceLight
+                                                    ),
+                                                    RoundedCornerShape(4.dp)
+                                                )
+                                                .clickable { selectedHeatmapDay = dayData }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Legend
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Less", fontSize = 9.sp, color = CosmosTextSecondary)
+                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(CosmosBackground))
+                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(ElectroPink.copy(alpha = 0.4f)))
+                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(ElectroPurple.copy(alpha = 0.5f)))
+                        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(ElectroPurple))
+                        Text("More Focus", fontSize = 9.sp, color = CosmosTextSecondary)
+                    }
+                }
+
+                // Selected heatmap day details tooltip
+                AnimatedVisibility(
+                    visible = selectedHeatmapDay != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    selectedHeatmapDay?.let { day ->
+                        val dateFormatter = remember { SimpleDateFormat("EEEE, MMM dd", Locale.getDefault()) }
+                        val formattedDate = dateFormatter.format(Date(day.timestamp))
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CosmosSurface, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(formattedDate, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ElectroPurple)
+                                Text(
+                                    text = "Focused: ${day.totalSecondsFocus / 60} min | Sessions Completed: ${day.sessionCount}",
+                                    fontSize = 12.sp,
+                                    color = CosmosTextPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            IconButton(onClick = { selectedHeatmapDay = null }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -701,3 +866,138 @@ fun FocusTimerScreen(
         )
     }
 }
+
+// Data Classes Packaging processed analytics values
+data class ProcessedDay(
+    val timestamp: Long,
+    val totalSecondsFocus: Int,
+    val sessionCount: Int = 0
+)
+
+data class MonthlyInterval(
+    val weekLabel: String,
+    val totalMinutesFocus: Int,
+    val totalXpGained: Int
+)
+
+data class CategoryXp(
+    val category: String,
+    val xp: Int
+)
+
+data class AnalyticsPackage(
+    val heatmapDays: List<ProcessedDay>,
+    val weeklyCategories: List<CategoryXp>,
+    val monthlyIntervals: List<MonthlyInterval>
+)
+
+private fun getLogicalDateStr(timestamp: Long): String {
+    val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+}
+
+private fun getLogicalDateFromDaysAgo(daysAgo: Int): String {
+    val cal = Calendar.getInstance()
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+    cal.add(Calendar.DAY_OF_YEAR, -daysAgo)
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+}
+
+private fun getTimestampOfStartOfLogicalDate(logicalDateStr: String): Long {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    return try {
+        sdf.parse(logicalDateStr)?.time ?: System.currentTimeMillis()
+    } catch (e: Exception) {
+        System.currentTimeMillis()
+    }
+}
+
+private fun getLogicalWeekStart(baseTimestamp: Long = System.currentTimeMillis()): String {
+    val cal = Calendar.getInstance().apply { timeInMillis = baseTimestamp }
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    if (hour < 4) {
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+    cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+    return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+}
+
+fun processAnalyticsData(
+    completions: List<TaskCompletion>,
+    focusSessions: List<FocusSession>
+): AnalyticsPackage {
+    // 1. Process Heatmap Days: last 35 days (5 columns * 7 days)
+    val heatmapList = ArrayList<ProcessedDay>()
+    for (i in (34 downTo 0)) {
+        val targetLogicalStr = getLogicalDateFromDaysAgo(i)
+        // Find all focus sessions that completed on this logical date
+        val daySessions = focusSessions.filter { getLogicalDateStr(it.completedAt) == targetLogicalStr }
+        val sumSeconds = daySessions.sumOf { it.durationSeconds }
+        val targetTimestamp = getTimestampOfStartOfLogicalDate(targetLogicalStr)
+        heatmapList.add(ProcessedDay(targetTimestamp, sumSeconds, daySessions.size))
+    }
+
+    // 2. Process Radar: Current Week XP per Category from completions
+    val currentWeekStartStr = getLogicalWeekStart()
+    val thisWeekCompletions = completions.filter {
+        val compLogical = if (it.completedOnLogicalDate.isNotEmpty()) it.completedOnLogicalDate else getLogicalDateStr(it.completedAt)
+        compLogical >= currentWeekStartStr
+    }
+    
+    val categoryXpMap = thisWeekCompletions.groupBy { it.taskCategory.trim() }
+        .mapValues { entry -> entry.value.sumOf { it.xpEarned } }
+
+    val weeklyCategories = categoryXpMap.map { (cat, xp) ->
+        val formattedCat = if (cat.isNotEmpty()) {
+            cat.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+        } else "Uncategorized"
+        CategoryXp(category = formattedCat, xp = xp)
+    }.sortedByDescending { it.xp }
+
+    // 3. Process line chart correlation: 5 weekly nodes in the current month
+    val intervals = ArrayList<MonthlyInterval>()
+    val todayLogicalStr = getLogicalDateStr(System.currentTimeMillis())
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val parsedDate = try { sdf.parse(todayLogicalStr) } catch(e: Exception) { Date() }
+    val currentLogicalMonthCal = Calendar.getInstance().apply { time = parsedDate }
+    currentLogicalMonthCal.set(Calendar.DAY_OF_MONTH, 1)
+
+    for (week in 1..5) {
+        val startCal = Calendar.getInstance().apply {
+            time = currentLogicalMonthCal.time
+            add(Calendar.DAY_OF_YEAR, (week - 1) * 7)
+        }
+        val startLogicalStr = sdf.format(startCal.time)
+
+        val endCal = Calendar.getInstance().apply {
+            time = startCal.time
+            add(Calendar.DAY_OF_YEAR, 6)
+        }
+        val endLogicalStr = sdf.format(endCal.time)
+
+        val focusMins = focusSessions.filter {
+            getLogicalDateStr(it.completedAt) in startLogicalStr..endLogicalStr
+        }.sumOf { it.durationSeconds } / 60
+
+        val xpGained = completions.filter {
+            val compLogical = if (it.completedOnLogicalDate.isNotEmpty()) it.completedOnLogicalDate else getLogicalDateStr(it.completedAt)
+            compLogical in startLogicalStr..endLogicalStr
+        }.sumOf { it.xpEarned }
+
+        intervals.add(MonthlyInterval("Week $week", focusMins, xpGained))
+    }
+
+    return AnalyticsPackage(
+        heatmapDays = heatmapList,
+        weeklyCategories = weeklyCategories,
+        monthlyIntervals = intervals
+    )
+}
+

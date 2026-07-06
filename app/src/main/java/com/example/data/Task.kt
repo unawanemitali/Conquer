@@ -53,3 +53,11 @@ data class FocusSession(
     val xpEarned: Int = 0
 )
 
+@Entity(tableName = "activities_catalog")
+data class CatalogItem(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val category: String, // "Work", "Personal", "Entertainment"
+    val tier: Int // 1, 2, or 3
+)
+

@@ -53,7 +53,6 @@ import com.example.ui.UserLevelInfo
 import com.example.ui.FocusTimerScreen
 import com.example.ui.ApothecaryStoreDialog
 import com.example.ui.ReviewRitualDialog
-import com.example.ui.TechnicalAnalyticsScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -342,7 +341,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CosmosTheme {
-                var showSplash by remember { mutableStateOf(true) }
+                val context = this@MainActivity
+                val prefs = remember { context.getSharedPreferences("local_storage", android.content.Context.MODE_PRIVATE) }
+                val todayString = getLogicalTodayString()
+                val lastLoginDate = prefs.getString("lastLoginDate", null)
+
+                var showSplash by remember {
+                    mutableStateOf(lastLoginDate != todayString)
+                }
+
+                LaunchedEffect(showSplash) {
+                    if (showSplash) {
+                        prefs.edit().putString("lastLoginDate", todayString).apply()
+                    }
+                }
 
                 val lifecycle = this@MainActivity.lifecycle
                 DisposableEffect(lifecycle) {
@@ -352,7 +364,11 @@ class MainActivity : ComponentActivity() {
                             isFirstTransition = false
                         } else if (event == Lifecycle.Event.ON_RESUME) {
                             if (!isFirstTransition) {
-                                showSplash = true
+                                val currentToday = getLogicalTodayString()
+                                val storedDate = prefs.getString("lastLoginDate", null)
+                                if (storedDate != currentToday) {
+                                    showSplash = true
+                                }
                             }
                         }
                     }
@@ -669,20 +685,6 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "Technical Stats") },
-                    label = { Text("Analytics", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = ElectroPurple,
-                        selectedTextColor = ElectroPurple,
-                        unselectedIconColor = CosmosTextSecondary,
-                        unselectedTextColor = CosmosTextSecondary,
-                        indicatorColor = CosmosSurfaceLight
-                    ),
-                    modifier = Modifier.testTag("nav_analytics_tab")
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 4,
-                    onClick = { selectedTab = 4 },
                     icon = { Icon(Icons.Default.DateRange, contentDescription = "Time-Series Calendars") },
                     label = { Text("Calendars", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
@@ -695,8 +697,8 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
                     modifier = Modifier.testTag("nav_calendar_tab")
                 )
                 NavigationBarItem(
-                    selected = selectedTab == 5,
-                    onClick = { selectedTab = 5 },
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
                     icon = { Icon(Icons.Default.List, contentDescription = "Priority Matrix") },
                     label = { Text("Matrix", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     colors = NavigationBarItemDefaults.colors(
@@ -744,9 +746,8 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
                         Triple("Dashboard", Icons.Default.Home, 0),
                         Triple("Habits Hub", Icons.Default.Favorite, 1),
                         Triple("Focus Timer", Icons.Default.PlayArrow, 2),
-                        Triple("Analytics", Icons.Default.Star, 3),
-                        Triple("Calendars", Icons.Default.DateRange, 4),
-                        Triple("Priority Matrix", Icons.Default.List, 5)
+                        Triple("Calendars", Icons.Default.DateRange, 3),
+                        Triple("Priority Matrix", Icons.Default.List, 4)
                     )
 
                     tabs.forEach { (label, icon, index) ->
@@ -810,12 +811,9 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
                     FocusTimerScreen(viewModel = viewModel)
                 }
                 3 -> {
-                    TechnicalAnalyticsScreen(viewModel = viewModel)
-                }
-                4 -> {
                     CalendarAnalyticsScreen(viewModel = viewModel)
                 }
-                5 -> {
+                4 -> {
                     PriorityMatrixScreen(viewModel = viewModel)
                 }
             }
@@ -962,7 +960,7 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
                     .background(CosmosBackground)
                     .padding(innerPadding)
             ) {
-                 when (selectedTab) {
+                  when (selectedTab) {
                     0 -> {
                         DashboardScreen(
                             viewModel = viewModel,
@@ -983,12 +981,9 @@ fun MainAppScreen(viewModel: TaskViewModel = viewModel()) {
                         FocusTimerScreen(viewModel = viewModel)
                     }
                     3 -> {
-                        TechnicalAnalyticsScreen(viewModel = viewModel)
-                    }
-                    4 -> {
                         CalendarAnalyticsScreen(viewModel = viewModel)
                     }
-                    5 -> {
+                    4 -> {
                         PriorityMatrixScreen(viewModel = viewModel)
                     }
                 }
@@ -1606,6 +1601,9 @@ fun DashboardScreen(
                 }
             }
         }
+
+        // --- Activities Catalog Menu (Tiers for quick task addition) ---
+        ActivitiesCatalogMenu(viewModel = viewModel)
 
         // --- 2. ALL PRODUCTIVITY TASKS (Directly beneath Today's Frog) ---
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3319,7 +3317,9 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
             }
         }
 
-        // --- Date Navigation ---
+        // --- Date Navigation / Historical Dropdowns ---
+        var expandedDropdown by remember { mutableStateOf(false) }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -3337,19 +3337,161 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
                         -1
                     )
                     viewModel.setTargetDate(cal.timeInMillis)
+                    viewModel.setSelectedCalendarDate(cal.timeInMillis)
                 }
             ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Previous Range", tint = Color.White)
             }
 
-            Text(
-                text = dateLabel,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium,
-                color = ElectroPurple,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                
+                Card(
+                    modifier = Modifier
+                        .clickable {
+                            if (rangeType == CalendarRangeType.DAILY) {
+                                val calendar = Calendar.getInstance().apply { timeInMillis = targetDateMillis }
+                                android.app.DatePickerDialog(
+                                    context,
+                                    { _, year, month, dayOfMonth ->
+                                        val sel = Calendar.getInstance().apply {
+                                            set(Calendar.YEAR, year)
+                                            set(Calendar.MONTH, month)
+                                            set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                                            set(Calendar.HOUR_OF_DAY, 0)
+                                            set(Calendar.MINUTE, 0)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }
+                                        viewModel.setTargetDate(sel.timeInMillis)
+                                        viewModel.setSelectedCalendarDate(sel.timeInMillis)
+                                    },
+                                    calendar.get(Calendar.YEAR),
+                                    calendar.get(Calendar.MONTH),
+                                    calendar.get(Calendar.DAY_OF_MONTH)
+                                ).show()
+                            } else {
+                                expandedDropdown = true
+                            }
+                        },
+                    colors = CardDefaults.cardColors(containerColor = CosmosSurface),
+                    border = BorderStroke(1.dp, ElectroPurple.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "Calendar Picker",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = dateLabel,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = CosmosTextPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Dropdown Trigger",
+                            tint = ElectroPurple,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                if (rangeType != CalendarRangeType.DAILY) {
+                    DropdownMenu(
+                        expanded = expandedDropdown,
+                        onDismissRequest = { expandedDropdown = false },
+                        modifier = Modifier
+                            .background(CosmosSurface)
+                            .border(1.dp, CosmosSurfaceLight, RoundedCornerShape(8.dp))
+                    ) {
+                        when (rangeType) {
+                            CalendarRangeType.WEEKLY -> {
+                                val pastWeeks = List(12) { index ->
+                                    val weekCal = Calendar.getInstance()
+                                    val currentDayOfWeek = weekCal.get(Calendar.DAY_OF_WEEK)
+                                    val offset = if (currentDayOfWeek == Calendar.SUNDAY) 6 else currentDayOfWeek - Calendar.MONDAY
+                                    weekCal.add(Calendar.DAY_OF_YEAR, -offset)
+                                    weekCal.add(Calendar.WEEK_OF_YEAR, -index)
+                                    
+                                    val startOfWeekMillis = weekCal.timeInMillis
+                                    val startFormat = SimpleDateFormat("MMM d", Locale.getDefault()).format(weekCal.time)
+                                    
+                                    weekCal.add(Calendar.DAY_OF_YEAR, 6)
+                                    val endFormat = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(weekCal.time)
+                                    val label = "Week of $startFormat - $endFormat"
+                                    
+                                    Pair(label, startOfWeekMillis)
+                                }
+
+                                pastWeeks.forEach { (label, startMillis) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label, color = CosmosTextPrimary, style = MaterialTheme.typography.bodyMedium) },
+                                        onClick = {
+                                            viewModel.setTargetDate(startMillis)
+                                            viewModel.setSelectedCalendarDate(startMillis)
+                                            expandedDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                            CalendarRangeType.MONTHLY -> {
+                                val pastMonths = List(12) { index ->
+                                    val monthCal = Calendar.getInstance()
+                                    monthCal.set(Calendar.DAY_OF_MONTH, 1)
+                                    monthCal.add(Calendar.MONTH, -index)
+                                    val label = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(monthCal.time)
+                                    Pair(label, monthCal.timeInMillis)
+                                }
+
+                                pastMonths.forEach { (label, startMillis) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label, color = CosmosTextPrimary, style = MaterialTheme.typography.bodyMedium) },
+                                        onClick = {
+                                            viewModel.setTargetDate(startMillis)
+                                            viewModel.setSelectedCalendarDate(startMillis)
+                                            expandedDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                            CalendarRangeType.YEARLY -> {
+                                val pastYears = List(5) { index ->
+                                    val yearCal = Calendar.getInstance()
+                                    yearCal.set(Calendar.MONTH, Calendar.JANUARY)
+                                    yearCal.set(Calendar.DAY_OF_MONTH, 1)
+                                    yearCal.add(Calendar.YEAR, -index)
+                                    val label = SimpleDateFormat("yyyy", Locale.getDefault()).format(yearCal.time)
+                                    Pair(label, yearCal.timeInMillis)
+                                }
+
+                                pastYears.forEach { (label, startMillis) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label, color = CosmosTextPrimary, style = MaterialTheme.typography.bodyMedium) },
+                                        onClick = {
+                                            viewModel.setTargetDate(startMillis)
+                                            viewModel.setSelectedCalendarDate(startMillis)
+                                            expandedDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+            }
 
             IconButton(
                 onClick = {
@@ -3363,6 +3505,7 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
                         1
                     )
                     viewModel.setTargetDate(cal.timeInMillis)
+                    viewModel.setSelectedCalendarDate(cal.timeInMillis)
                 }
             ) {
                 Icon(Icons.Default.ArrowForward, contentDescription = "Next Range", tint = Color.White)
@@ -3550,81 +3693,83 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
         }
 
         // --- Custom Daily Special Note Editor (Journaling entry) ---
-        val noteDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val selectedDateStr = noteDateFormat.format(Date(selectedCalendarDateMillis))
-        val readableDateStr = SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date(selectedCalendarDateMillis))
-        
-        val allNotes by viewModel.allDailyNotesFlow.collectAsState(initial = emptyList())
-        val notesMap = allNotes.associate { it.dateStr to it.note }
-        val savedNoteText = notesMap[selectedDateStr] ?: ""
+        if (rangeType == CalendarRangeType.DAILY) {
+            val noteDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val selectedDateStr = noteDateFormat.format(Date(selectedCalendarDateMillis))
+            val readableDateStr = SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date(selectedCalendarDateMillis))
+            
+            val allNotes by viewModel.allDailyNotesFlow.collectAsState(initial = emptyList())
+            val notesMap = allNotes.associate { it.dateStr to it.note }
+            val savedNoteText = notesMap[selectedDateStr] ?: ""
 
-        val context = androidx.compose.ui.platform.LocalContext.current
-        var isSavedByClick by remember(selectedDateStr) { mutableStateOf(false) }
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var isSavedByClick by remember(selectedDateStr) { mutableStateOf(false) }
 
-        var tempNoteText by remember(selectedDateStr) { mutableStateOf("") }
-        LaunchedEffect(selectedDateStr, savedNoteText) {
-            tempNoteText = savedNoteText
-            isSavedByClick = false
-        }
+            var tempNoteText by remember(selectedDateStr) { mutableStateOf("") }
+            LaunchedEffect(selectedDateStr, savedNoteText) {
+                tempNoteText = savedNoteText
+                isSavedByClick = false
+            }
 
-        Card(
-            colors = CardDefaults.cardColors(containerColor = CosmosSurface),
-            border = BorderStroke(1.dp, CosmosSurfaceLight),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "📝 SPECIAL DAILY NOTE",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ElectroPink,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.2.sp
-                )
-                Text(
-                    text = "Journal thoughts or objectives for $readableDateStr",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CosmosTextSecondary
-                )
-
-                OutlinedTextField(
-                    value = tempNoteText,
-                    onValueChange = {
-                        tempNoteText = it
-                        isSavedByClick = false
-                    },
-                    placeholder = { Text("Write a special note, strategy or journal entry for this date...", color = CosmosTextSecondary.copy(alpha = 0.5f), fontSize = 13.sp) },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = ElectroPurple,
-                        unfocusedBorderColor = CosmosSurfaceLight,
-                        focusedLabelColor = ElectroPurple,
-                        unfocusedLabelColor = CosmosTextSecondary
-                    )
-                )
-
-                Button(
-                    onClick = {
-                        viewModel.saveDailyNote(selectedDateStr, tempNoteText)
-                        isSavedByClick = true
-                        android.widget.Toast.makeText(context, "Note Saved Successfully!", android.widget.Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isSavedByClick) Color(0xFF10B981) else ElectroPurple
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = "Save Note", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CosmosSurface),
+                border = BorderStroke(1.dp, CosmosSurfaceLight),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = if (isSavedByClick) "Saved ✔️" else "Save Note",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "📝 SPECIAL DAILY NOTE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ElectroPink,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
                     )
+                    Text(
+                        text = "Journal thoughts or objectives for $readableDateStr",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosTextSecondary
+                    )
+
+                    OutlinedTextField(
+                        value = tempNoteText,
+                        onValueChange = {
+                            tempNoteText = it
+                            isSavedByClick = false
+                        },
+                        placeholder = { Text("Write a special note, strategy or journal entry for this date...", color = CosmosTextSecondary.copy(alpha = 0.5f), fontSize = 13.sp) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ElectroPurple,
+                            unfocusedBorderColor = CosmosSurfaceLight,
+                            focusedLabelColor = ElectroPurple,
+                            unfocusedLabelColor = CosmosTextSecondary
+                        )
+                    )
+
+                    Button(
+                        onClick = {
+                            viewModel.saveDailyNote(selectedDateStr, tempNoteText)
+                            isSavedByClick = true
+                            android.widget.Toast.makeText(context, "Note Saved Successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSavedByClick) Color(0xFF10B981) else ElectroPurple
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "Save Note", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isSavedByClick) "Saved ✔️" else "Save Note",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -3840,6 +3985,243 @@ fun CalendarAnalyticsScreen(viewModel: TaskViewModel) {
                     CategoryMetricRow(label = "🧭 Other Tasks", completed = dist.entertainment, total = grandTotal, color = CategoryEntertainmentColor)
                 }
             }
+
+            // --- Custom Timframe Historical Achievements Section ---
+            val rangeStartAndEnd = remember(rangeType, targetDateMillis) {
+                val cal = Calendar.getInstance().apply { timeInMillis = targetDateMillis }
+                when (rangeType) {
+                    CalendarRangeType.DAILY -> {
+                        val checkCal = cal.clone() as Calendar
+                        checkCal.set(Calendar.HOUR_OF_DAY, 4)
+                        checkCal.set(Calendar.MINUTE, 0)
+                        checkCal.set(Calendar.SECOND, 0)
+                        checkCal.set(Calendar.MILLISECOND, 0)
+                        val start = checkCal.timeInMillis
+
+                        val endCal = cal.clone() as Calendar
+                        endCal.add(Calendar.DAY_OF_YEAR, 1)
+                        endCal.set(Calendar.HOUR_OF_DAY, 3)
+                        endCal.set(Calendar.MINUTE, 59)
+                        endCal.set(Calendar.SECOND, 59)
+                        endCal.set(Calendar.MILLISECOND, 999)
+                        val end = endCal.timeInMillis
+                        Pair(start, end)
+                    }
+                    CalendarRangeType.WEEKLY -> {
+                        val weekCal = Calendar.getInstance().apply { timeInMillis = targetDateMillis }
+                        val currentDayOfWeek = weekCal.get(Calendar.DAY_OF_WEEK)
+                        val offset = if (currentDayOfWeek == Calendar.SUNDAY) 6 else currentDayOfWeek - Calendar.MONDAY
+                        weekCal.add(Calendar.DAY_OF_YEAR, -offset)
+                        val checkCal = weekCal.clone() as Calendar
+                        checkCal.set(Calendar.HOUR_OF_DAY, 4)
+                        checkCal.set(Calendar.MINUTE, 0)
+                        checkCal.set(Calendar.SECOND, 0)
+                        checkCal.set(Calendar.MILLISECOND, 0)
+                        val startOfWeek = checkCal.timeInMillis
+
+                        weekCal.add(Calendar.DAY_OF_YEAR, 6)
+                        val endCal = weekCal.clone() as Calendar
+                        endCal.add(Calendar.DAY_OF_YEAR, 1)
+                        endCal.set(Calendar.HOUR_OF_DAY, 3)
+                        endCal.set(Calendar.MINUTE, 59)
+                        endCal.set(Calendar.SECOND, 59)
+                        endCal.set(Calendar.MILLISECOND, 999)
+                        val endOfWeek = endCal.timeInMillis
+                        Pair(startOfWeek, endOfWeek)
+                    }
+                    CalendarRangeType.MONTHLY -> {
+                        val mCal = Calendar.getInstance().apply {
+                            timeInMillis = targetDateMillis
+                            set(Calendar.DAY_OF_MONTH, 1)
+                        }
+                        val checkCal = mCal.clone() as Calendar
+                        checkCal.set(Calendar.HOUR_OF_DAY, 4)
+                        checkCal.set(Calendar.MINUTE, 0)
+                        checkCal.set(Calendar.SECOND, 0)
+                        checkCal.set(Calendar.MILLISECOND, 0)
+                        val startOfMonth = checkCal.timeInMillis
+
+                        val lastDay = mCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                        mCal.set(Calendar.DAY_OF_MONTH, lastDay)
+                        val endCal = mCal.clone() as Calendar
+                        endCal.add(Calendar.DAY_OF_YEAR, 1)
+                        endCal.set(Calendar.HOUR_OF_DAY, 3)
+                        endCal.set(Calendar.MINUTE, 59)
+                        endCal.set(Calendar.SECOND, 59)
+                        endCal.set(Calendar.MILLISECOND, 999)
+                        val endOfMonth = endCal.timeInMillis
+                        Pair(startOfMonth, endOfMonth)
+                    }
+                    CalendarRangeType.YEARLY -> {
+                        val yCal = Calendar.getInstance().apply {
+                            timeInMillis = targetDateMillis
+                            set(Calendar.MONTH, Calendar.JANUARY)
+                            set(Calendar.DAY_OF_MONTH, 1)
+                        }
+                        val checkCal = yCal.clone() as Calendar
+                        checkCal.set(Calendar.HOUR_OF_DAY, 4)
+                        checkCal.set(Calendar.MINUTE, 0)
+                        checkCal.set(Calendar.SECOND, 0)
+                        checkCal.set(Calendar.MILLISECOND, 0)
+                        val startOfYear = checkCal.timeInMillis
+
+                        yCal.set(Calendar.MONTH, Calendar.DECEMBER)
+                        yCal.set(Calendar.DAY_OF_MONTH, 31)
+                        val endCal = yCal.clone() as Calendar
+                        endCal.add(Calendar.DAY_OF_YEAR, 1)
+                        endCal.set(Calendar.HOUR_OF_DAY, 3)
+                        endCal.set(Calendar.MINUTE, 59)
+                        endCal.set(Calendar.SECOND, 59)
+                        endCal.set(Calendar.MILLISECOND, 999)
+                        val endOfYear = endCal.timeInMillis
+                        Pair(startOfYear, endOfYear)
+                    }
+                }
+            }
+
+            val periodCompletions = remember(completions, rangeStartAndEnd) {
+                completions.filter { it.completedAt in rangeStartAndEnd.first..rangeStartAndEnd.second }
+            }
+            val periodXp = remember(periodCompletions) {
+                periodCompletions.sumOf { it.xpEarned }
+            }
+            val periodCounts = remember(periodCompletions) {
+                val counts = mutableMapOf("Work" to 0, "Personal" to 0, "Others" to 0)
+                periodCompletions.forEach { comp ->
+                    val cat = comp.taskCategory
+                    if (cat.lowercase(Locale.ROOT) == "work") {
+                        counts["Work"] = (counts["Work"] ?: 0) + 1
+                    } else if (cat.lowercase(Locale.ROOT) == "personal") {
+                        counts["Personal"] = (counts["Personal"] ?: 0) + 1
+                    } else {
+                        counts["Others"] = (counts["Others"] ?: 0) + 1
+                    }
+                }
+                counts
+            }
+
+            val periodStreak = remember(periodCompletions) {
+                val dates = periodCompletions.map {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.completedAt))
+                }.distinct().sorted()
+                if (dates.isEmpty()) 0
+                else {
+                    var maxStreak = 1
+                    var currentStreak = 1
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    for (i in 1 until dates.size) {
+                        try {
+                            val d1 = sdf.parse(dates[i - 1])
+                            val d2 = sdf.parse(dates[i])
+                            if (d1 != null && d2 != null) {
+                                val diff = d2.time - d1.time
+                                val diffDays = diff / (24 * 60 * 60 * 1000)
+                                if (diffDays == 1L) {
+                                    currentStreak++
+                                    if (currentStreak > maxStreak) maxStreak = currentStreak
+                                } else if (diffDays > 1L) {
+                                    currentStreak = 1
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // ignore parsing errors
+                        }
+                    }
+                    maxStreak
+                }
+            }
+
+            val achievementsUnlockedInPeriod = remember(periodXp, periodCounts, periodStreak) {
+                MilestoneSystem.unlockablesList.filter { item ->
+                    MilestoneSystem.checkIsUnlocked(item, periodXp, periodCounts, periodStreak)
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CosmosSurface),
+                border = BorderStroke(1.dp, CosmosSurfaceLight),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "🏆 TIMEFRAME ACHIEVEMENTS UNLOCKED",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ElectroPink,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.2.sp
+                    )
+                    Text(
+                        text = "Based on activity logged during this timeframe (${dateLabel})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosTextSecondary
+                    )
+
+                    if (achievementsUnlockedInPeriod.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No achievements unlocked during this timeframe.\nComplete more quests to unlock milestones!",
+                                color = CosmosTextSecondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        achievementsUnlockedInPeriod.forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(CosmosBackground.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                    .border(BorderStroke(1.dp, CosmosSurfaceLight), RoundedCornerShape(12.dp))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = item.iconEmoji,
+                                    fontSize = 28.sp,
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(ElectroPurple.copy(alpha = 0.1f), CircleShape)
+                                        .border(1.dp, ElectroPurple, CircleShape)
+                                        .wrapContentSize(Alignment.Center)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CosmosTextPrimary
+                                    )
+                                    Text(
+                                        text = item.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CosmosTextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .background(ElectroPink.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = item.unlockConditionDesc,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ElectroPink
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         } ?: Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -4015,7 +4397,14 @@ fun CategoryMetricRow(
 @Composable
 fun PriorityMatrixScreen(viewModel: TaskViewModel) {
     val tasks by viewModel.tasksFlow.collectAsState(initial = emptyList())
-    val activeTasks = remember(tasks) { tasks.filter { !it.isCompleted } }
+    val activeTasks = remember(tasks) {
+        val todayStr = getLogicalTodayString()
+        tasks.filter { task ->
+            if (task.isCompleted) return@filter false
+            val taskAssignedStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(task.assignedDateMillis))
+            taskAssignedStr == todayStr
+        }
+    }
 
     var selectedTaskForReassign by remember { mutableStateOf<com.example.data.Task?>(null) }
     var quadrantToAddIn by remember { mutableStateOf<String?>(null) }
@@ -5782,4 +6171,381 @@ fun MarqueeQuoteBar(
         }
     }
 }
+
+@Composable
+fun ActivitiesCatalogMenu(
+    viewModel: TaskViewModel,
+    modifier: Modifier = Modifier
+) {
+    val catalogItems by viewModel.activitiesCatalog.collectAsState()
+    var isExpanded by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("activities_catalog_card")
+            .clip(RoundedCornerShape(16.dp)),
+        border = BorderStroke(1.dp, CosmosSurfaceLight),
+        colors = CardDefaults.cardColors(containerColor = CosmosSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header: Accordion trigger
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(16.dp)
+                    .testTag("activities_catalog_header"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Toggle Catalog",
+                        tint = ElectroPurple,
+                        modifier = Modifier.graphicsLayer(rotationZ = if (isExpanded) 180f else 0f)
+                    )
+                    Text(
+                        text = "Activities Catalog Menu",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = CosmosTextPrimary
+                    )
+                }
+
+                IconButton(
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier.testTag("add_catalog_item_button").size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Catalog Template",
+                        tint = ElectroPink,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            if (isExpanded) {
+                HorizontalDivider(color = CosmosSurfaceLight, modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    val groupedItems = remember(catalogItems) {
+                        catalogItems.groupBy { it.category }
+                    }
+
+                    if (catalogItems.isEmpty()) {
+                        Text(
+                            text = "No custom activities in the catalog. Click the '+' icon to add some!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CosmosTextSecondary,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        val categoriesOrder = listOf("Work", "Personal", "Entertainment")
+                        val sortedCategories = (categoriesOrder + groupedItems.keys).distinct()
+
+                        sortedCategories.forEach { category ->
+                            val items = groupedItems[category] ?: emptyList()
+                            if (items.isNotEmpty()) {
+                                CatalogCategorySection(
+                                    title = category,
+                                    items = items,
+                                    categoryColor = when (category.lowercase(java.util.Locale.ROOT)) {
+                                        "work" -> CategoryWorkColor
+                                        "personal" -> CategoryPersonalColor
+                                        "entertainment" -> CategoryEntertainmentColor
+                                        else -> ElectroPurple
+                                    },
+                                    onQuickAdd = { item ->
+                                        viewModel.addTask(
+                                            title = item.title,
+                                            category = item.category,
+                                            isRecurring = false
+                                        )
+                                    },
+                                    onDelete = { item ->
+                                        viewModel.deleteCatalogItem(item)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddCatalogItemDialog(
+            viewModel = viewModel,
+            onDismiss = { showAddDialog = false },
+            onConfirm = { title, category ->
+                viewModel.insertCatalogItem(title, category, 1)
+                showAddDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun CatalogCategorySection(
+    title: String,
+    items: List<CatalogItem>,
+    categoryColor: Color,
+    onQuickAdd: (CatalogItem) -> Unit,
+    onDelete: (CatalogItem) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 4.dp, height = 16.dp)
+                    .background(categoryColor, RoundedCornerShape(2.dp))
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = CosmosTextPrimary
+            )
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items.forEach { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CosmosSurfaceLight, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = CosmosTextPrimary
+                        )
+                        Text(
+                            text = item.category,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = CosmosTextSecondary
+                        )
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { onQuickAdd(item) },
+                            modifier = Modifier.testTag("quick_add_${item.id}").size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Quick Add Copy",
+                                tint = categoryColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onDelete(item) },
+                            modifier = Modifier.testTag("delete_catalog_${item.id}").size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Catalog Item",
+                                tint = CosmosTextSecondary.copy(alpha = 0.6f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddCatalogItemDialog(
+    viewModel: TaskViewModel,
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, category: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    
+    val tasks by viewModel.tasksFlow.collectAsState(initial = emptyList())
+    val catalogItems by viewModel.activitiesCatalog.collectAsState()
+    
+    val dynamicCategories = remember(tasks, catalogItems) {
+        val extracted = (tasks.map { it.category } + catalogItems.map { it.category })
+            .filter { it.isNotBlank() }
+            .toSet()
+            .toList()
+            .sorted()
+        if (extracted.isEmpty()) {
+            listOf("Work", "Personal", "Entertainment")
+        } else {
+            extracted
+        }
+    }
+
+    var selectedCategory by remember(dynamicCategories) {
+        mutableStateOf(dynamicCategories.firstOrNull() ?: "Work")
+    }
+    
+    var isCreatingNewCategory by remember { mutableStateOf(false) }
+    var newCategoryName by remember { mutableStateOf("") }
+
+    val finalCategory = if (isCreatingNewCategory) newCategoryName.trim() else selectedCategory
+    val isFormValid = title.isNotBlank() && finalCategory.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Add Activity to Catalog",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = CosmosTextPrimary
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Activity Title") },
+                    modifier = Modifier.fillMaxWidth().testTag("catalog_title_input"),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = CosmosTextPrimary,
+                        unfocusedTextColor = CosmosTextPrimary,
+                        focusedBorderColor = ElectroPurple,
+                        unfocusedBorderColor = CosmosSurfaceLight
+                    )
+                )
+
+                // Category selection row/chips
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Category",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = CosmosTextSecondary
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        dynamicCategories.forEach { cat ->
+                            val isSelected = selectedCategory == cat && !isCreatingNewCategory
+                            val bg = if (isSelected) ElectroPurple else CosmosSurfaceLight
+                            val textCol = if (isSelected) Color.White else CosmosTextPrimary
+                            Box(
+                                modifier = Modifier
+                                    .background(bg, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        selectedCategory = cat
+                                        isCreatingNewCategory = false
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = cat,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = textCol
+                                )
+                            }
+                        }
+
+                        // "+ New Category" button
+                        val isNewSelected = isCreatingNewCategory
+                        val bgNew = if (isNewSelected) ElectroPink else CosmosSurfaceLight
+                        val textColNew = if (isNewSelected) Color.White else CosmosTextPrimary
+                        Box(
+                            modifier = Modifier
+                                .background(bgNew, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    isCreatingNewCategory = true
+                                }
+                                .padding(vertical = 8.dp, horizontal = 12.dp)
+                                .testTag("add_custom_category_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "+ New Category",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = textColNew
+                            )
+                        }
+                    }
+                }
+
+                if (isCreatingNewCategory) {
+                    OutlinedTextField(
+                        value = newCategoryName,
+                        onValueChange = { newCategoryName = it },
+                        label = { Text("New Category Name") },
+                        modifier = Modifier.fillMaxWidth().testTag("new_category_input"),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = CosmosTextPrimary,
+                            unfocusedTextColor = CosmosTextPrimary,
+                            focusedBorderColor = ElectroPink,
+                            unfocusedBorderColor = CosmosSurfaceLight
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (isFormValid) {
+                        onConfirm(title.trim(), finalCategory)
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = ElectroPurple),
+                enabled = isFormValid,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Add to Catalog")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = CosmosTextSecondary)
+            }
+        },
+        containerColor = CosmosSurface,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
 

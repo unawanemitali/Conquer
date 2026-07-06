@@ -67,4 +67,14 @@ interface TaskDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDailyNote(note: DailyNote)
+
+    // --- Activities Catalog Queries ---
+    @Query("SELECT * FROM activities_catalog ORDER BY id DESC")
+    fun getAllCatalogItemsFlow(): Flow<List<CatalogItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCatalogItem(item: CatalogItem): Long
+
+    @Delete
+    suspend fun deleteCatalogItem(item: CatalogItem)
 }

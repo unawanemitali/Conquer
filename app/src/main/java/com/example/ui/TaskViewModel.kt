@@ -137,6 +137,26 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         }.map { it.id }.toSet()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    // --- Activities Catalog ---
+    val activitiesCatalog: StateFlow<List<CatalogItem>> = repository.allCatalogItemsFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun insertCatalogItem(title: String, category: String, tier: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.insertCatalogItem(CatalogItem(title = title, category = category, tier = tier))
+        }
+    }
+
+    fun deleteCatalogItem(item: CatalogItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteCatalogItem(item)
+        }
+    }
+
     // --- SharedPreferences Backed Equipped Avatar Skin ---
     private val sharedPrefs = application.getSharedPreferences("gamified_pref", Context.MODE_PRIVATE)
     
